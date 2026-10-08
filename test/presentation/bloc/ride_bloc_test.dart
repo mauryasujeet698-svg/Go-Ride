@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:go_ride/core/error/failures.dart';
 import 'package:go_ride/core/result/result.dart';
 import 'package:go_ride/domain/enums/ride_status.dart';
+import 'package:go_ride/domain/events/telemetry.dart';
 import 'package:go_ride/application/sync/ride_sync_coordinator.dart';
 import 'package:go_ride/presentation/bloc/ride/ride_bloc.dart';
 import 'package:go_ride/presentation/bloc/ride/ride_event.dart';
