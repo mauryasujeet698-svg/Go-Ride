@@ -26,7 +26,7 @@ enum RideUiStatus {
 }
 
 @freezed
-class RideState with _$RideState {
+abstract class RideState with _$RideState {
   const factory RideState({
     required RideUiStatus uiStatus,
     Ride? authoritativeRide,
