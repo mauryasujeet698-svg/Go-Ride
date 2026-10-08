@@ -28,7 +28,7 @@ void main() {
     states = [];
     when(() => auth.getValidToken()).thenAnswer((_) async => const Success<String, Failure>('token'));
     when(() => realtime.connectAuthenticated(any())).thenAnswer((_) async => const Success<void, Failure>(null));
-    when(() => realtime.eventStream).thenReturn(stream.stream);
+    when(() => realtime.eventStream).thenAnswer((_) => stream.stream);
     when(() => realtime.subscribeToRide(any())).thenAnswer((_) async => const Success<void, Failure>(null));
     when(() => realtime.disconnect()).thenAnswer((_) async {});
     coordinator = RideSyncCoordinator(getActiveRide, realtime, auth);
