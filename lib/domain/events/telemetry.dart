@@ -6,7 +6,7 @@ import '../value_objects/identifiers.dart';
 part 'telemetry.freezed.dart';
 
 @freezed
-class DriverTelemetry with _$DriverTelemetry {
+abstract class DriverTelemetry with _$DriverTelemetry {
   const DriverTelemetry._();
 
   const factory DriverTelemetry({
