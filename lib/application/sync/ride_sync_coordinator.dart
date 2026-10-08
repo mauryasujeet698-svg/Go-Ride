@@ -21,7 +21,7 @@ class Syncing extends SyncState {
 
 class SyncSuccess extends SyncState {
   final Ride ride;
-  const SyncSuccess(this.ride);
+  SyncSuccess(this.ride);
 }
 
 class SyncFailed extends SyncState {
@@ -63,7 +63,7 @@ class RideSyncCoordinator {
     }
 
     _isFetchingSnapshot = true;
-    _stateController.add(const Syncing());
+    _stateController.add(Syncing());
 
     try {
       for (var attempt = 0; attempt < _maxResyncAttempts; attempt++) {
@@ -81,7 +81,7 @@ class RideSyncCoordinator {
             if (snapshot == null) {
               _authoritativeRide = null;
               _eventBuffer.clear();
-              _stateController.add(const SyncIdle());
+              _stateController.add(SyncIdle());
               terminal = true;
               return;
             }
@@ -123,7 +123,7 @@ class RideSyncCoordinator {
 
         if (attempt == _maxResyncAttempts - 1) {
           _stateController.add(
-            const SyncFailed(
+            SyncFailed(
               ReconciliationFailure(
                 'Unable to reconcile the ride after bounded recovery attempts.',
               ),
