@@ -1,6 +1,124 @@
-          retryRequired = true;
-        }
+import 'dart:async';
 
+import '../../core/error/failures.dart';
+import '../../domain/entities/ride.dart';
+import '../../domain/events/realtime_events.dart';
+import '../../domain/events/telemetry.dart';
+import '../../domain/state_machine/reconciliation.dart';
+import '../../domain/services/i_auth_session_provider.dart';
+import '../../domain/services/i_realtime_service.dart';
+import '../usecases/ride_usecases.dart';
+
+sealed class SyncState {}
+
+class SyncIdle extends SyncState {
+  const SyncIdle();
+}
+
+class Syncing extends SyncState {
+  const Syncing();
+}
+
+class SyncSuccess extends SyncState {
+  final Ride ride;
+  const SyncSuccess(this.ride);
+}
+
+class SyncFailed extends SyncState {
+  final Failure failure;
+  const SyncFailed(this.failure);
+}
+
+enum BufferProcessingResult { success, resyncRequired }
+
+class RideSyncCoordinator {
+  static const int _maxResyncAttempts = 3;
+
+  final GetActiveRideUseCase _getActiveRide;
+  final IRealtimeService _realtimeService;
+  final IAuthSessionProvider _authProvider;
+  final _stateController = StreamController<SyncState>.broadcast();
+  final _telemetryController = StreamController<DriverTelemetry>.broadcast();
+  final List<RideStateChanged> _eventBuffer = <RideStateChanged>[];
+
+  bool _isFetchingSnapshot = false;
+  bool _resyncRequested = false;
+  Ride? _authoritativeRide;
+  StreamSubscription<DomainRealtimeEvent>? _wsSubscription;
+
+  RideSyncCoordinator(
+    this._getActiveRide,
+    this._realtimeService,
+    this._authProvider,
+  );
+
+  Stream<SyncState> get syncStream => _stateController.stream;
+  Stream<DriverTelemetry> get telemetryStream => _telemetryController.stream;
+  Ride? get currentRide => _authoritativeRide;
+
+  Future<void> startSync() async {
+    if (_isFetchingSnapshot) {
+      _resyncRequested = true;
+      return;
+    }
+
+    _isFetchingSnapshot = true;
+    _stateController.add(const Syncing());
+
+    try {
+      for (var attempt = 0; attempt < _maxResyncAttempts; attempt++) {
+        _resyncRequested = false;
+
+        final connected = await _ensureRealtimeConnection();
+        if (!connected) return;
+
+        final result = await _getActiveRide();
+        var retryRequired = false;
+        var terminal = false;
+
+        await result.fold(
+          (snapshot) async {
+            if (snapshot == null) {
+              _authoritativeRide = null;
+              _eventBuffer.clear();
+              _stateController.add(const SyncIdle());
+              terminal = true;
+              return;
+            }
+
+            _authoritativeRide = snapshot;
+
+            final subscribeResult =
+                await _realtimeService.subscribeToRide(snapshot.id);
+            final subscribed = subscribeResult.fold(
+              (_) => true,
+              (failure) {
+                _stateController.add(SyncFailed(failure));
+                return false;
+              },
+            );
+
+            if (!subscribed) {
+              terminal = true;
+              return;
+            }
+
+            final bufferResult = _processBuffer();
+            if (bufferResult == BufferProcessingResult.resyncRequired) {
+              retryRequired = true;
+              return;
+            }
+
+            _stateController.add(SyncSuccess(_authoritativeRide!));
+          },
+          (failure) async {
+            _stateController.add(SyncFailed(failure));
+            terminal = true;
+          },
+        );
+
+        if (terminal) return;
+        if (_resyncRequested) retryRequired = true;
         if (!retryRequired) return;
 
         if (attempt == _maxResyncAttempts - 1) {
@@ -57,10 +175,14 @@
     if (event is! RideStateChanged) return;
 
     if (_isFetchingSnapshot) {
-      _eventBuffer.add(event);
-    } else {
-      _reconcileLiveEvent(event);
+      if (_authoritativeRide == null ||
+          event.incomingRide.id == _authoritativeRide!.id) {
+        _eventBuffer.add(event);
+      }
+      return;
     }
+
+    _reconcileLiveEvent(event);
   }
 
   BufferProcessingResult _processBuffer() {
@@ -139,3 +261,4 @@
     await _stateController.close();
     await _telemetryController.close();
   }
+}
