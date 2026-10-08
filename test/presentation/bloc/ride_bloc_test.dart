@@ -27,7 +27,8 @@ void main() {
     cancel = MockCancelRideUseCase();
     sync = MockRideSyncCoordinator();
     syncStates = StreamController<SyncState>.broadcast();
-    when(() => sync.syncStream).thenReturn(syncStates.stream);
+    when(() => sync.syncStream).thenAnswer((_) => syncStates.stream);
+    when(() => sync.telemetryStream).thenAnswer((_) => const Stream<DriverTelemetry>.empty());
     when(() => sync.startSync()).thenAnswer((_) async {});
     when(() => sync.disconnect()).thenAnswer((_) async {});
     when(() => sync.dispose()).thenAnswer((_) async {});
