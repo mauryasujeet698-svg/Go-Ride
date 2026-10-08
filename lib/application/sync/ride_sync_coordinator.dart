@@ -124,7 +124,7 @@ class RideSyncCoordinator {
         if (attempt == _maxResyncAttempts - 1) {
           _stateController.add(
             SyncFailed(
-              ReconciliationFailure(
+              const ReconciliationFailure(
                 'Unable to reconcile the ride after bounded recovery attempts.',
               ),
             ),
