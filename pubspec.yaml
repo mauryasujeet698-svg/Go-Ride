@@ -20,5 +20,8 @@ dev_dependencies:
   mocktail: ^1.0.1
   bloc_test: ^9.1.7
   flutter_lints: ^3.0.0
+  flutter_svg: ^2.0.17
 flutter:
   uses-material-design: true
+  assets:
+    - assets/goride_logo.svg
