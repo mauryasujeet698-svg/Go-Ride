@@ -3,6 +3,8 @@ name: Go-Ride Android Build
 on:
   push:
     branches: [batch-2-hardening]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
