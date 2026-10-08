@@ -1,120 +1,3 @@
-import 'dart:async';
-
-import '../../core/error/failures.dart';
-import '../../domain/entities/ride.dart';
-import '../../domain/events/realtime_events.dart';
-import '../../domain/events/telemetry.dart';
-import '../../domain/state_machine/reconciliation.dart';
-import '../../domain/services/i_auth_session_provider.dart';
-import '../../domain/services/i_realtime_service.dart';
-import '../usecases/ride_usecases.dart';
-
-sealed class SyncState {}
-
-class SyncIdle extends SyncState {}
-
-class Syncing extends SyncState {}
-
-class SyncSuccess extends SyncState {
-  final Ride ride;
-  SyncSuccess(this.ride);
-}
-
-class SyncFailed extends SyncState {
-  final Failure failure;
-  SyncFailed(this.failure);
-}
-
-enum BufferProcessingResult { success, resyncRequired }
-
-class RideSyncCoordinator {
-  static const int _maxResyncAttempts = 3;
-
-  final GetActiveRideUseCase _getActiveRide;
-  final IRealtimeService _realtimeService;
-  final IAuthSessionProvider _authProvider;
-  final _stateController = StreamController<SyncState>.broadcast();
-  final _telemetryController = StreamController<DriverTelemetry>.broadcast();
-  final List<RideStateChanged> _eventBuffer = [];
-
-  bool _isFetchingSnapshot = false;
-  bool _resyncRequested = false;
-  Ride? _authoritativeRide;
-  StreamSubscription? _wsSubscription;
-
-  RideSyncCoordinator(
-    this._getActiveRide,
-    this._realtimeService,
-    this._authProvider,
-  );
-
-  Stream<SyncState> get syncStream => _stateController.stream;
-  Stream<DriverTelemetry> get telemetryStream => _telemetryController.stream;
-  Ride? get currentRide => _authoritativeRide;
-
-  Future<void> startSync() async {
-    if (_isFetchingSnapshot) {
-      _resyncRequested = true;
-      return;
-    }
-
-    _isFetchingSnapshot = true;
-    _stateController.add(Syncing());
-
-    try {
-      for (var attempt = 0; attempt < _maxResyncAttempts; attempt++) {
-        _resyncRequested = false;
-
-        final connSuccess = await _ensureRealtimeConnection();
-        if (!connSuccess) return;
-
-        final result = await _getActiveRide();
-        var retryRequired = false;
-        var terminal = false;
-
-        await result.fold(
-          (snapshot) async {
-            if (snapshot == null) {
-              _authoritativeRide = null;
-              _eventBuffer.clear();
-              _stateController.add(SyncIdle());
-              terminal = true;
-              return;
-            }
-
-            _authoritativeRide = snapshot;
-
-            final subscribeResult =
-                await _realtimeService.subscribeToRide(snapshot.id);
-            final subscribed = subscribeResult.fold(
-              (_) => true,
-              (failure) {
-                _stateController.add(SyncFailed(failure));
-                return false;
-              },
-            );
-
-            if (!subscribed) {
-              terminal = true;
-              return;
-            }
-
-            final bufferResult = _processBuffer();
-            if (bufferResult == BufferProcessingResult.resyncRequired) {
-              retryRequired = true;
-              return;
-            }
-
-            _stateController.add(SyncSuccess(_authoritativeRide!));
-          },
-          (failure) async {
-            _stateController.add(SyncFailed(failure));
-            terminal = true;
-          },
-        );
-
-        if (terminal) return;
-        if (_resyncRequested) {
           retryRequired = true;
         }
 
@@ -122,7 +5,7 @@ class RideSyncCoordinator {
 
         if (attempt == _maxResyncAttempts - 1) {
           _stateController.add(
-            SyncFailed(
+            const SyncFailed(
               ReconciliationFailure(
                 'Unable to reconcile the ride after bounded recovery attempts.',
               ),
@@ -230,7 +113,6 @@ class RideSyncCoordinator {
     switch (result) {
       case ReconciliationResult.applied:
         _authoritativeRide = event.incomingRide;
-        _consecutiveResyncs = 0;
         _stateController.add(SyncSuccess(_authoritativeRide!));
       case ReconciliationResult.stale:
       case ReconciliationResult.duplicate:
@@ -249,7 +131,6 @@ class RideSyncCoordinator {
     _wsSubscription = null;
     _eventBuffer.clear();
     _resyncRequested = false;
-    _consecutiveResyncs = 0;
     await _realtimeService.disconnect();
   }
 
@@ -258,4 +139,3 @@ class RideSyncCoordinator {
     await _stateController.close();
     await _telemetryController.close();
   }
-}
