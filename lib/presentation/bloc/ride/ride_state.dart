@@ -1,15 +1,28 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+
 import '../../../core/error/failures.dart';
 import '../../../core/types/coordinate.dart';
 import '../../../domain/entities/ride.dart';
 import '../../../domain/entities/fare_estimate.dart';
 import '../../../domain/events/telemetry.dart';
 import '../../../domain/value_objects/identifiers.dart';
+
 part 'ride_state.freezed.dart';
 
 enum RideUiStatus {
-  initial, estimating, readyToConfirm, submitting, searching, driverAssigned,
-  driverArrived, inTrip, cancelling, recovering, cancelled, error
+  initial,
+  estimating,
+  readyToConfirm,
+  submitting,
+  searching,
+  driverAssigned,
+  driverArriving,
+  driverArrived,
+  inTrip,
+  cancelling,
+  recovering,
+  cancelled,
+  error,
 }
 
 @freezed
@@ -25,5 +38,7 @@ class RideState with _$RideState {
     DriverTelemetry? telemetry,
     Failure? failure,
   }) = _RideState;
-  factory RideState.initial() => const RideState(uiStatus: RideUiStatus.initial);
+
+  factory RideState.initial() =>
+      const RideState(uiStatus: RideUiStatus.initial);
 }
