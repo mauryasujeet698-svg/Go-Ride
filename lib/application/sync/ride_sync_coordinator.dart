@@ -9,14 +9,14 @@ import '../../domain/services/i_auth_session_provider.dart';
 import '../../domain/services/i_realtime_service.dart';
 import '../usecases/ride_usecases.dart';
 
-sealed class SyncState {\n  const SyncState();\n}
+sealed class SyncState {}
 
 class SyncIdle extends SyncState {
-  const SyncIdle();
+  SyncIdle();
 }
 
 class Syncing extends SyncState {
-  const Syncing();
+  Syncing();
 }
 
 class SyncSuccess extends SyncState {
@@ -26,7 +26,7 @@ class SyncSuccess extends SyncState {
 
 class SyncFailed extends SyncState {
   final Failure failure;
-  const SyncFailed(this.failure);
+  SyncFailed(this.failure);
 }
 
 enum BufferProcessingResult { success, resyncRequired }
