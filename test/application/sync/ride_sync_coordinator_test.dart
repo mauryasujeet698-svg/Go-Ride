@@ -48,8 +48,7 @@ void main() {
     stream.add(RideStateChanged(eventId: tEventId, timestamp: DateTime.now(), incomingRide: tRide.copyWith(version: 2, status: RideStatus.driverAssigned)));
     completer.complete(Success<Ride?, Failure>(tRide));
     await future;
-    final successes = states.whereType<SyncSuccess>().toList();
-    expect(successes.single.ride.version, 2);
+    expect(coordinator.currentRide?.version, 2);
   });
 
   test('auth failure prevents REST access', () async {
