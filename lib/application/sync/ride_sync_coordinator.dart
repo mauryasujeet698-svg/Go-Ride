@@ -39,7 +39,6 @@ class RideSyncCoordinator {
 
   bool _isFetchingSnapshot = false;
   bool _resyncRequested = false;
-  int _consecutiveResyncs = 0;
   Ride? _authoritativeRide;
   StreamSubscription? _wsSubscription;
 
@@ -78,7 +77,6 @@ class RideSyncCoordinator {
             if (snapshot == null) {
               _authoritativeRide = null;
               _eventBuffer.clear();
-              _consecutiveResyncs = 0;
               _stateController.add(SyncIdle());
               terminal = true;
               return;
@@ -103,12 +101,10 @@ class RideSyncCoordinator {
 
             final bufferResult = _processBuffer();
             if (bufferResult == BufferProcessingResult.resyncRequired) {
-              _consecutiveResyncs++;
               retryRequired = true;
               return;
             }
 
-            _consecutiveResyncs = 0;
             _stateController.add(SyncSuccess(_authoritativeRide!));
           },
           (failure) async {
@@ -126,7 +122,7 @@ class RideSyncCoordinator {
 
         if (attempt == _maxResyncAttempts - 1) {
           _stateController.add(
-            const SyncFailed(
+            SyncFailed(
               ReconciliationFailure(
                 'Unable to reconcile the ride after bounded recovery attempts.',
               ),
@@ -241,7 +237,6 @@ class RideSyncCoordinator {
         break;
       case ReconciliationResult.gapDetected:
       case ReconciliationResult.invalidAuthoritativeState:
-        _consecutiveResyncs++;
         _resyncRequested = true;
         if (!_isFetchingSnapshot) {
           unawaited(startSync());
