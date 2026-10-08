@@ -9,7 +9,7 @@ import 'driver.dart';
 part 'ride.freezed.dart';
 
 @Freezed(toStringOverride: false)
-class Ride with _$Ride {
+abstract class Ride with _$Ride {
   const Ride._();
 
   const factory Ride({
