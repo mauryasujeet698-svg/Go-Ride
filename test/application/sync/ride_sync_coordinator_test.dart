@@ -8,6 +8,7 @@ import 'package:go_ride/domain/events/realtime_events.dart';
 import 'package:go_ride/application/sync/ride_sync_coordinator.dart';
 import '../../helpers/dummy_data.dart';
 import '../../helpers/test_setup.dart';
+import 'package:go_ride/domain/entities/ride.dart';
 
 void main() {
   late RideSyncCoordinator coordinator;
@@ -40,12 +41,12 @@ void main() {
   });
 
   test('applies buffered N+1 event after REST baseline', () async {
-    final completer = Completer<Result<go_ride.domain.entities.Ride?, Failure>>();
+    final completer = Completer<Result<Ride?, Failure>>();
     when(() => getActiveRide()).thenAnswer((_) => completer.future);
     final future = coordinator.startSync();
     await Future<void>.delayed(Duration.zero);
     stream.add(RideStateChanged(eventId: tEventId, timestamp: DateTime.now(), incomingRide: tRide.copyWith(version: 2, status: RideStatus.driverAssigned)));
-    completer.complete(Success<go_ride.domain.entities.Ride?, Failure>(tRide));
+    completer.complete(Success<Ride?, Failure>(tRide));
     await future;
     final successes = states.whereType<SyncSuccess>().toList();
     expect(successes.single.ride.version, 2);
