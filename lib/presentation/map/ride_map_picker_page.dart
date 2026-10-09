@@ -142,8 +142,17 @@ class _RideMapPickerPageState extends State<RideMapPickerPage> {
   LatLng? _destination;
   bool _isLocating = false;
 
-  LatLng get _activePoint =>
-      _target == RideMapTarget.pickup ? (_pickup ?? _defaultCenter) : (_destination ?? _defaultCenter);
+  LatLng get _activePoint {
+    final active = _target == RideMapTarget.pickup ? _pickup : _destination;
+    return active ?? _pickup ?? _destination ?? _defaultCenter;
+  }
+
+  double get _initialZoom {
+    final active = _target == RideMapTarget.pickup ? _pickup : _destination;
+    if (active != null) return 14;
+    if (_pickup != null || _destination != null) return 11.5;
+    return 6.5;
+  }
 
   @override
   void initState() {
@@ -262,7 +271,7 @@ class _RideMapPickerPageState extends State<RideMapPickerPage> {
               mapController: _mapController,
               options: MapOptions(
                 initialCenter: _activePoint,
-                initialZoom: 13,
+                initialZoom: _initialZoom,
                 onTap: (_, point) => _selectPoint(point),
               ),
               children: [
