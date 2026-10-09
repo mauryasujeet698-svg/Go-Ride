@@ -54,6 +54,9 @@ export async function buildServer() {
   if (!pool) return reply.code(503).send({ status: "not_ready", reason: "database_not_configured" });
   if (!accessTokenVerifier) return reply.code(503).send({ status: "not_ready", reason: "authentication_not_configured" });
   if (features.maps.routing && !routingProvider) return reply.code(503).send({ status: "not_ready", reason: "routing_not_configured" });
+  if (features.dispatch.enabled && (!features.maps.routing || !routingProvider)) {
+   return reply.code(503).send({ status: "not_ready", reason: "dispatch_routing_not_configured" });
+  }
   if (features.dispatch.enabled && (!process.env.RIDE_PIN_SECRET || process.env.RIDE_PIN_SECRET.trim().length < 32)) {
    return reply.code(503).send({ status: "not_ready", reason: "pickup_verification_not_configured" });
   }
