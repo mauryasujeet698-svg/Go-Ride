@@ -22,6 +22,12 @@ test("liveness and capability endpoints work without claiming database readiness
   assert.equal(capabilities.json().payments.mode, "disabled");
   const missing = await app.inject({ method: "GET", url: "/v1/rides" });
   assert.equal(missing.statusCode, 404);
+  const protectedRide = await app.inject({ method: "POST", url: "/v1/rides", payload: { fareQuoteId: "00000000-0000-4000-8000-000000000000", idempotencyKey: "test-idempotency-key-123" } });
+  assert.equal(protectedRide.statusCode, 503);
+  assert.equal(protectedRide.json().error.code, "AUTH_NOT_CONFIGURED");
+  const protectedQuote = await app.inject({ method: "POST", url: "/v1/fare-quotes", payload: {} });
+  assert.equal(protectedQuote.statusCode, 503);
+  assert.equal(protectedQuote.json().error.code, "AUTH_NOT_CONFIGURED");
  } finally {
   await app.close();
   if (previousUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previousUrl;
