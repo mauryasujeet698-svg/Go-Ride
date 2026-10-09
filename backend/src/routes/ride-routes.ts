@@ -220,7 +220,7 @@ export async function registerRideRoutes(app: FastifyInstance, deps: Dependencie
    catch { await client.query("ROLLBACK"); return reply.code(409).send({ error: { code: "INVALID_RIDE_TRANSITION", message: "This ride cannot move to the requested status." } }); }
    if (body.data.status === "IN_PROGRESS") {
     const secret = process.env.RIDE_PIN_SECRET?.trim();
-    if (!secret || secret.length < 32 || !ride.start_pin_hash || !body.data.pickupPin || !/^\\d{4}$/.test(body.data.pickupPin)) {
+    if (!secret || secret.length < 32 || !ride.start_pin_hash || !body.data.pickupPin || !/^\d{4}$/.test(body.data.pickupPin)) {
      await client.query("ROLLBACK");
      return reply.code(400).send({ error: { code: "PICKUP_PIN_REQUIRED", message: "A valid four-digit customer pickup PIN is required before the trip starts." } });
     }
