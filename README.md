@@ -8,7 +8,7 @@ Go-Ride is a ride-hailing platform planned as three separate apps: Customer, Dri
 
 Implemented foundations include ride-domain models, state-machine/reconciliation contracts, application use cases, a RideBloc, provider interfaces, unit tests, and GitHub Actions quality/build workflows.
 
-The current customer UI still contains prototype-only behaviour. Fare estimates are not route-based, booking state is not persisted by a live backend, and the app does not yet integrate a real map/GPS/routing provider or driver matching service. A successful APK build is not proof of a complete ride journey.
+The current customer UI still contains prototype-only behaviour. Fare estimates are not yet connected to the new server quote endpoint, booking state is not persisted by a live backend, and the app does not yet integrate the identity provider, live map/GPS/routing provider or driver matching service. A successful APK build is not proof of a complete ride journey. The Driver Partner and Admin shells now include an explicit backend-readiness check, but this is diagnostic only and does not enable authenticated operations.
 
 ## Architecture principles
 
@@ -34,6 +34,7 @@ Generated Freezed files are generated during CI and are intentionally not commit
 
 ## GitHub workflow
 
+- Go-Ride Engineering Checks runs backend typecheck/tests, Customer analyze/tests, and Driver Partner/Admin analyze/tests plus Android debug-build smoke tests on engineering branches. These checks do not create release APKs.
 - Go-Ride Quality Gate runs dependency installation, code generation, static analysis and tests on pull requests targeting main and pushes to main.
 - Go-Ride Android Build builds a release APK for pull requests and pushes to main, and can be started manually from Actions.
 - Build artifacts include the source commit and APK checksum metadata. Artifacts are temporary; download and archive a release you intend to keep.
