@@ -63,7 +63,7 @@ class GoRideShell extends StatefulWidget {
 
 class _GoRideShellState extends State<GoRideShell> {
   int _selectedIndex = 0;
-  final _booking = _BookingDraft();
+  final _booking = GoRideBookingDraft();
 
   @override
   Widget build(BuildContext context) {
@@ -148,7 +148,7 @@ class GoRideHomePage extends StatefulWidget {
     super.key,
   });
 
-  final _BookingDraft booking;
+  final GoRideBookingDraft booking;
   final VoidCallback onBook;
 
   @override
@@ -506,7 +506,7 @@ class _SecurityBanner extends StatelessWidget {
 class _RideReviewPage extends StatelessWidget {
   const _RideReviewPage({required this.booking});
 
-  final _BookingDraft booking;
+  final GoRideBookingDraft booking;
 
   @override
   Widget build(BuildContext context) {
@@ -547,7 +547,7 @@ class _RideReviewPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '₹' + estimate.toString(),
+                  '₹$estimate',
                   style: const TextStyle(
                     color: GoRideApp._navy,
                     fontSize: 34,
@@ -571,7 +571,7 @@ class _RideReviewPage extends StatelessWidget {
             onPressed: () {
               booking.active = true;
               booking.lastRideId =
-                  'GR-' + DateTime.now().millisecondsSinceEpoch.toString();
+                  'GR-${DateTime.now().millisecondsSinceEpoch}';
               Navigator.of(context).pop(true);
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -709,7 +709,7 @@ class _RouteRow extends StatelessWidget {
 class _RideRequestStatusPage extends StatelessWidget {
   const _RideRequestStatusPage({required this.booking});
 
-  final _BookingDraft booking;
+  final GoRideBookingDraft booking;
 
   @override
   Widget build(BuildContext context) {
@@ -908,15 +908,15 @@ class _ProfilePage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _ProfileTile(
+          const _ProfileTile(
             icon: Icons.location_on_outlined,
             title: 'Saved places',
           ),
-          _ProfileTile(
+          const _ProfileTile(
             icon: Icons.shield_outlined,
             title: 'Security',
           ),
-          _ProfileTile(
+          const _ProfileTile(
             icon: Icons.help_outline,
             title: 'Help & support',
           ),
@@ -952,7 +952,7 @@ class _ProfileTile extends StatelessWidget {
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(title + ' will be connected next.')),
+            SnackBar(content: Text('$title will be connected next.')),
           );
         },
       ),
@@ -999,7 +999,7 @@ enum RideType {
   }
 }
 
-class _BookingDraft {
+class GoRideBookingDraft {
   String pickup = '';
   String destination = '';
   RideType type = RideType.auto;
