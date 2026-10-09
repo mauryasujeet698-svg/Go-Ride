@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomInt } from "node:crypto";
+import { createHash, createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
 import { z } from "zod";
@@ -175,4 +175,74 @@ export async function registerRideRoutes(app: FastifyInstance, deps: Dependencie
    client.release();
   }
  });
+
+ app.get("/v1/rides/:rideId", async (request, reply) => {
+  const account = await currentAccount(request, reply, deps.pool, deps.verifier);
+  if (!account) return;
+  const params = z.object({ rideId: z.string().uuid() }).safeParse(request.params);
+  if (!params.success) return reply.code(400).send({ error: { code: "INVALID_RIDE_ID", message: "A valid ride ID is required." } });
+  if (!deps.pool) return reply.code(503).send({ error: { code: "DATABASE_NOT_CONFIGURED", message: "Ride service is unavailable." } });
+  const result = await deps.pool.query(
+   "SELECT id, rider_id, driver_id, status, version, currency, final_amount_minor, requested_at, assigned_at, started_at, completed_at, cancelled_at FROM rides WHERE id = $1 LIMIT 1",
+   [params.data.rideId]
+  );
+  const ride = result.rows[0] as { id: string; rider_id: string; driver_id: string | null; status: string; version: number; currency: string; final_amount_minor: string | number | null; requested_at: Date; assigned_at: Date | null; started_at: Date | null; completed_at: Date | null; cancelled_at: Date | null } | undefined;
+  if (!ride) return reply.code(404).send({ error: { code: "RIDE_NOT_FOUND", message: "Ride not found." } });
+  if (account.role !== "ADMIN" && ride.rider_id !== account.id && ride.driver_id !== account.id) {
+   return reply.code(403).send({ error: { code: "RIDE_FORBIDDEN", message: "This ride does not belong to this account." } });
+  }
+  return { id: ride.id, status: ride.status, version: ride.version,
+   fare: ride.final_amount_minor === null ? null : { amountMinor: Number(ride.final_amount_minor), currency: ride.currency },
+   requestedAt: ride.requested_at, assignedAt: ride.assigned_at, startedAt: ride.started_at,
+   completedAt: ride.completed_at, cancelledAt: ride.cancelled_at };
+ });
+
+ app.post("/v1/rides/:rideId/status", async (request, reply) => {
+  const account = await currentAccount(request, reply, deps.pool, deps.verifier);
+  if (!account) return;
+  if (account.role !== "DRIVER") return reply.code(403).send({ error: { code: "ROLE_FORBIDDEN", message: "Only the assigned driver can update ride progress." } });
+  const params = z.object({ rideId: z.string().uuid() }).safeParse(request.params);
+  const body = z.object({
+   status: z.enum(["DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED"]),
+   pickupPin: z.string().optional()
+  }).strict().safeParse(request.body);
+  if (!params.success || !body.success) return reply.code(400).send({ error: { code: "INVALID_REQUEST", message: "A valid ride ID and status are required." } });
+  if (!deps.pool) return reply.code(503).send({ error: { code: "DATABASE_NOT_CONFIGURED", message: "Ride service is unavailable." } });
+  const client = await deps.pool.connect();
+  try {
+   await client.query("BEGIN");
+   const selected = await client.query("SELECT id, driver_id, status, version, start_pin_hash FROM rides WHERE id = $1 FOR UPDATE", [params.data.rideId]);
+   const ride = selected.rows[0] as { id: string; driver_id: string | null; status: RideStatus; version: number; start_pin_hash: string | null } | undefined;
+   if (!ride) { await client.query("ROLLBACK"); return reply.code(404).send({ error: { code: "RIDE_NOT_FOUND", message: "Ride not found." } }); }
+   if (ride.driver_id !== account.id) { await client.query("ROLLBACK"); return reply.code(403).send({ error: { code: "RIDE_FORBIDDEN", message: "Only the assigned driver can update this ride." } }); }
+   try { assertTransition(ride.status, body.data.status); }
+   catch { await client.query("ROLLBACK"); return reply.code(409).send({ error: { code: "INVALID_RIDE_TRANSITION", message: "This ride cannot move to the requested status." } }); }
+   if (body.data.status === "IN_PROGRESS") {
+    const secret = process.env.RIDE_PIN_SECRET?.trim();
+    if (!secret || secret.length < 32 || !ride.start_pin_hash || !body.data.pickupPin || !/^\\d{4}$/.test(body.data.pickupPin)) {
+     await client.query("ROLLBACK");
+     return reply.code(400).send({ error: { code: "PICKUP_PIN_REQUIRED", message: "A valid four-digit customer pickup PIN is required before the trip starts." } });
+    }
+    const expected = Buffer.from(ride.start_pin_hash, "hex");
+    const actual = createHmac("sha256", secret).update(ride.id + ":" + body.data.pickupPin).digest();
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+     await client.query("ROLLBACK");
+     return reply.code(400).send({ error: { code: "INVALID_PICKUP_PIN", message: "The pickup PIN is incorrect." } });
+    }
+   }
+   const version = ride.version + 1;
+   const timestampColumn = body.data.status === "IN_PROGRESS" ? "started_at" : body.data.status === "COMPLETED" ? "completed_at" : null;
+   if (timestampColumn) await client.query("UPDATE rides SET status = $2, version = $3, " + timestampColumn + " = now(), updated_at = now() WHERE id = $1", [ride.id, body.data.status, version]);
+   else await client.query("UPDATE rides SET status = $2, version = $3, updated_at = now() WHERE id = $1", [ride.id, body.data.status, version]);
+   await client.query("INSERT INTO ride_events (ride_id, version, actor_user_id, event_type) VALUES ($1,$2,$3,$4)", [ride.id, version, account.id, body.data.status]);
+   if (body.data.status === "COMPLETED") await client.query("UPDATE driver_profiles SET is_available = true, updated_at = now() WHERE user_id = $1 AND verification_status = 'VERIFIED'", [account.id]);
+   await client.query("COMMIT");
+   return { id: ride.id, status: body.data.status, version };
+  } catch (error) {
+   await client.query("ROLLBACK").catch(() => undefined);
+   request.log.error({ requestId: request.id, err: error }, "Ride status update failed");
+   return reply.code(503).send({ error: { code: "RIDE_UPDATE_FAILED", message: "Ride status could not be updated safely." } });
+  } finally { client.release(); }
+ });
+
 }
