@@ -109,7 +109,8 @@ export async function buildServer() {
  });
  // Presentation hints only; secrets are never returned and these flags are not authorization.
  app.get("/v1/capabilities", async () => ({
-  payments: { enabled: features.payments.enabled, mode: features.payments.mode, methods: features.payments.methods },
+  // Fail closed until intent/capture/refund, verified webhook and reconciliation routes exist.
+  payments: { enabled: false, mode: "disabled", methods: [] },
   maps: features.maps, dispatch: features.dispatch, support: features.support, safety: features.safety
  }));
  app.setNotFoundHandler(async (_request, reply) => reply.code(404).send({ error: { code: "NOT_FOUND", message: "Endpoint not implemented." } }));
