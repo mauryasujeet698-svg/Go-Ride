@@ -62,8 +62,8 @@ class RideMapPreview extends StatelessWidget {
                     destination: destination,
                   ),
                 ),
-                RichAttributionWidget(
-                  attributions: const [
+                const RichAttributionWidget(
+                  attributions: [
                     TextSourceAttribution('© OpenStreetMap contributors'),
                   ],
                 ),
@@ -276,8 +276,8 @@ class _RideMapPickerPageState extends State<RideMapPickerPage> {
                     destination: _destination,
                   ),
                 ),
-                RichAttributionWidget(
-                  attributions: const [
+                const RichAttributionWidget(
+                  attributions: [
                     TextSourceAttribution('© OpenStreetMap contributors'),
                   ],
                 ),
