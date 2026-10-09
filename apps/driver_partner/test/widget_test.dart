@@ -8,4 +8,11 @@ void main() {
     expect(find.text('Ride offers'), findsOneWidget);
     expect(find.textContaining('No fake online status or earnings are shown.'), findsOneWidget);
   });
+
+  testWidgets('shows unconfigured backend honestly without enabling ride actions', (tester) async {
+    await tester.pumpWidget(const DriverPartnerApp());
+    expect(find.text('Backend connection'), findsOneWidget);
+    expect(find.textContaining('API URL not configured'), findsOneWidget);
+    expect(find.text('Unavailable'), findsNWidgets(4));
+  });
 }
