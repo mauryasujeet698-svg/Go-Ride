@@ -41,7 +41,7 @@ jobs:
         run: npm test
 
   customer:
-    name: Customer app analyze and tests (no APK)
+    name: Customer app tests and debug APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,9 +53,22 @@ jobs:
       - run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter analyze
       - run: flutter test
+      - name: Generate Android platform
+        run: flutter create --platforms=android --org com.goride .
+      - name: Configure Android location permissions
+        run: python3 tool/configure_android_location_permissions.py
+      - name: Build Customer debug APK
+        run: flutter build apk --debug
+      - name: Upload Customer debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-ride-customer-debug-${{ github.sha }}
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
 
   driver-partner:
-    name: Driver Partner app analyze and tests
+    name: Driver Partner app tests and debug APK
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -66,16 +79,23 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Generate Android platform for validation
+      - name: Generate Android platform
         run: flutter create --platforms=android --org com.goride .
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - name: Android debug build smoke test
+      - name: Build Driver Partner debug APK
         run: flutter build apk --debug
+      - name: Upload Driver Partner debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-ride-driver-partner-debug-${{ github.sha }}
+          path: apps/driver_partner/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
 
   admin:
-    name: Admin app analyze and tests
+    name: Admin app tests and debug APK
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -86,10 +106,17 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Generate Android platform for validation
+      - name: Generate Android platform
         run: flutter create --platforms=android --org com.goride .
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - name: Android debug build smoke test
+      - name: Build Admin debug APK
         run: flutter build apk --debug
+      - name: Upload Admin debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-ride-admin-debug-${{ github.sha }}
+          path: apps/admin/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
