@@ -6,7 +6,7 @@ test("liveness and capability endpoints work without claiming database readiness
  const previousUrl = process.env.DATABASE_URL;
  const previousMode = process.env.FEATURE_PAYMENTS_MODE;
  const previousEnabled = process.env.FEATURE_PAYMENTS_ENABLED;
- delete process.env.DATABASE_URL;
+ process.env.DATABASE_URL = "postgres://test:test@127.0.0.1:5432/test";
  process.env.FEATURE_PAYMENTS_MODE = "live";
  process.env.FEATURE_PAYMENTS_ENABLED = "true";
  const { app } = await buildServer();
