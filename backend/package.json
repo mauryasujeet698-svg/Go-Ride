@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "description": "Go-Ride shared ride-hailing API",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --test dist/**/*.test.js"
+    "test": "npm run build && node --test dist/domain/ride-state.test.js dist/config/features.test.js dist/server.test.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
