@@ -1,10 +1,10 @@
 # Go-Ride
 
-Go-Ride is an original Flutter/Dart ride-hailing customer app being developed toward a production-grade service. Mature ride platforms are product-quality benchmarks; Go-Ride has its own implementation and identity.
+Go-Ride is a ride-hailing platform planned as three separate apps: Customer, Driver Partner and Admin, backed by a shared API and database. It is ride-hailing only. Mature ride platforms are product-quality benchmarks; Go-Ride has its own implementation and identity.
 
 ## Current engineering status
 
-**Status: foundation and customer UI scaffold; not production-ready.**
+**Status: engineering work in progress; not production-ready.** The customer app remains a prototype, while this engineering branch adds initial separate Driver Partner/Admin shells and a backend foundation. These are not complete operational apps.
 
 Implemented foundations include ride-domain models, state-machine/reconciliation contracts, application use cases, a RideBloc, provider interfaces, unit tests, and GitHub Actions quality/build workflows.
 
@@ -15,7 +15,8 @@ The current customer UI still contains prototype-only behaviour. Fare estimates 
 - The backend will be authoritative for fare quotations and ride state.
 - REST snapshots are the recovery source of truth; realtime events are reconciled against server versions.
 - Map rendering, place search, geocoding, routing, authentication, persistence and realtime transport must sit behind replaceable interfaces.
-- The customer app is first; the shared API/data model must support separate driver and admin apps later.
+- Customer, Driver Partner and Admin are separate apps backed by one shared API/data model.
+- Payment methods and other provider-dependent capabilities remain disabled until the server integration and operational prerequisites are verified.
 - Keep a modular architecture. Do not introduce microservices without a concrete need.
 - Never commit API keys, credentials, signing keys or production secrets.
 
@@ -41,7 +42,7 @@ Generated Freezed files are generated during CI and are intentionally not commit
 
 ## Delivery roadmap
 
-See docs/ROADMAP.md for the phased plan and acceptance criteria.
+See docs/ROADMAP.md, docs/THREE_APP_FEATURE_FLAGS_AND_PAYMENTS.md and backend/README.md for the current plan and explicit implementation limitations.
 
 ## Definition of done
 
