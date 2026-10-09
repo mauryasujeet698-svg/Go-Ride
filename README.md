@@ -21,13 +21,29 @@ The current customer UI still contains prototype-only behaviour. Fare estimates 
 
 ## Development
 
-Prerequisites: a current stable Flutter SDK and Dart version compatible with pubspec.yaml.
+Prerequisites: a current stable Flutter SDK and Dart version compatible with pubspec.yaml, plus Python 3 for the Android permission helper.
 
+For a local Android build (the Android platform directory is generated rather than committed):
+
+    flutter create --platforms=android --org com.goride .
+    python3 tool/configure_android_location_permissions.py
     flutter pub get
     dart run build_runner build --delete-conflicting-outputs
     flutter analyze
     flutter test
     flutter build apk --release
+
+To use a different compatible tile provider without editing Dart code, pass its documented tile URL template at build time:
+
+    flutter build apk --release --dart-define=GO_RIDE_OSM_TILE_URL=https://your-approved-provider/{z}/{x}/{y}.png
+
+### Open map and current location
+
+The customer home screen now includes an interactive `flutter_map` preview and a map picker. Riders can pan/zoom, select pickup and destination pins, or request the device's current foreground location. Selected pins are stored as coordinates in the booking draft. The app currently displays coordinates as labels; human-readable place search/reverse geocoding and road routing are not implemented yet.
+
+The default OpenStreetMap standard tile endpoint is suitable only for development and careful low-volume use. OpenStreetMap data is openly licensed, but the community tile, geocoding, and routing endpoints are separate services with their own limits and no production capacity guarantee. Before public launch, choose a compliant hosted OpenStreetMap-derived provider or plan and test a self-hosted deployment. Keep visible attribution and follow the selected provider's caching and identification rules. See the [OpenStreetMap tile policy](https://operations.osmfoundation.org/policies/tiles/) and [Nominatim policy](https://operations.osmfoundation.org/policies/nominatim/).
+
+The app's fare display and ride-request flow remain explicitly marked as demo-only until connected to the backend and driver/dispatch system.
 
 Generated Freezed files are generated during CI and are intentionally not committed.
 
