@@ -1,0 +1,279 @@
+openapi: 3.1.0
+info:
+  title: Go-Ride API (Draft)
+  version: 0.1.0
+  description: >-
+    Design contract only. Not deployed and not yet implemented. Server must be authoritative
+    for authentication, fares, ride state, driver eligibility and payment state.
+servers:
+  - url: https://api.example.invalid/v1
+    description: Placeholder; replace only after environment and hosting are selected.
+security:
+  - bearerAuth: []
+paths:
+  /me:
+    get:
+      summary: Get the authenticated user's profile
+      responses:
+        '200':
+          description: Profile returned
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      summary: Update permitted profile fields
+      responses:
+        '200': { description: Updated profile }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /places/search:
+    get:
+      summary: Search pickup/drop-off places
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 200 }
+      responses:
+        '200':
+          description: Place suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Place' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /routes/quote:
+    post:
+      summary: Calculate a road route preview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [origin, destination]
+              properties:
+                origin: { $ref: '#/components/schemas/Coordinate' }
+                destination: { $ref: '#/components/schemas/Coordinate' }
+      responses:
+        '200':
+          description: Route result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Route' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /fare-quotes:
+    post:
+      summary: Create a server-authoritative fare quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pickup, dropoff, vehicleCategoryId]
+              properties:
+                pickup: { $ref: '#/components/schemas/Coordinate' }
+                dropoff: { $ref: '#/components/schemas/Coordinate' }
+                vehicleCategoryId: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: Quote created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FareQuote' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /rides:
+    post:
+      summary: Create a ride request idempotently
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fareQuoteId]
+              properties:
+                fareQuoteId: { type: string }
+                riderNote: { type: string, maxLength: 500 }
+      responses:
+        '201':
+          description: Ride created or original idempotent result returned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ride' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /rides/active:
+    get:
+      summary: Recover the authenticated rider's active ride
+      responses:
+        '200':
+          description: Active ride or null
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ride]
+                properties:
+                  ride:
+                    oneOf:
+                      - { $ref: '#/components/schemas/Ride' }
+                      - { type: 'null' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /rides/{rideId}:
+    get:
+      summary: Get an authoritative ride snapshot
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Ride snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ride' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /rides/{rideId}/cancel:
+    post:
+      summary: Request cancellation; server resolves any race with assignment/progress
+      parameters:
+        - in: path
+          name: rideId
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reasonCode, expectedVersion]
+              properties:
+                reasonCode: { type: string, minLength: 1, maxLength: 64 }
+                expectedVersion: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Authoritative ride snapshot after cancellation decision
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ride' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /support/cases:
+    post:
+      summary: Create a support case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, description]
+              properties:
+                rideId: { type: string }
+                category: { type: string, maxLength: 64 }
+                description: { type: string, minLength: 1, maxLength: 5000 }
+      responses:
+        '201': { description: Support case created with a case ID }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Coordinate:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+    Place:
+      type: object
+      required: [id, label, coordinate]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        coordinate: { $ref: '#/components/schemas/Coordinate' }
+    Route:
+      type: object
+      required: [distanceMeters, durationSeconds, polyline, provider, calculatedAt]
+      properties:
+        distanceMeters: { type: number, minimum: 0 }
+        durationSeconds: { type: integer, minimum: 0 }
+        polyline:
+          type: array
+          items: { $ref: '#/components/schemas/Coordinate' }
+        provider: { type: string }
+        calculatedAt: { type: string, format: date-time }
+    FareQuote:
+      type: object
+      required: [id, amountMinor, currency, expiresAt, distanceMeters, durationSeconds, pricingPolicyVersion]
+      properties:
+        id: { type: string }
+        amountMinor: { type: integer, minimum: 0, description: Amount in minor currency units; never a floating point amount. }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        expiresAt: { type: string, format: date-time }
+        distanceMeters: { type: number, minimum: 0 }
+        durationSeconds: { type: integer, minimum: 0 }
+        pricingPolicyVersion: { type: string }
+        breakdown:
+          type: array
+          items:
+            type: object
+            required: [code, label, amountMinor]
+            properties:
+              code: { type: string }
+              label: { type: string }
+              amountMinor: { type: integer }
+    Ride:
+      type: object
+      required: [id, status, version, fareQuoteId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        status:
+          type: string
+          enum: [REQUESTED, SEARCHING, DRIVER_ASSIGNED, DRIVER_ARRIVING, DRIVER_ARRIVED, IN_PROGRESS, COMPLETED, CANCELLED, EXPIRED, NO_DRIVER_FOUND, FAILED]
+        version: { type: integer, minimum: 0 }
+        fareQuoteId: { type: string }
+        assignedDriver:
+          oneOf:
+            - { $ref: '#/components/schemas/DriverSummary' }
+            - { type: 'null' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DriverSummary:
+      type: object
+      required: [displayName, vehicleCategory, registration]
+      properties:
+        displayName: { type: string }
+        vehicleCategory: { type: string }
+        registration: { type: string }
+        photoUrl: { type: string, format: uri }
+        etaSeconds: { type: integer, minimum: 0 }
+  responses:
+    Unauthorized:
+      description: Authentication required or token invalid
+    NotFound:
+      description: Resource not found or not accessible to this principal
+    Conflict:
+      description: State/version conflict; client should fetch an authoritative snapshot
+    ValidationError:
+      description: Request failed server-side validation
+    RateLimited:
+      description: Rate limit exceeded
