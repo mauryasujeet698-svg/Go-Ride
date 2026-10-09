@@ -11,6 +11,7 @@ import { z } from "zod";
 import { OsrmCompatibleRoutingProvider } from "./routing/osrm-provider.js";
 import { calculateFare, loadFarePolicy } from "./routing/fare-pricing.js";
 import { registerRideRoutes } from "./routes/ride-routes.js";
+import { registerSupportRoutes } from "./routes/support-routes.js";
 
 const { Pool } = pg;
 function requiredEnv(name: string): string {
@@ -47,6 +48,7 @@ export async function buildServer() {
   pool.on("error", (error: Error) => app.log.error({ err: error }, "Unexpected database pool error"));
  }
  await registerRideRoutes(app, { pool, verifier: accessTokenVerifier, features });
+ await registerSupportRoutes(app, { pool, verifier: accessTokenVerifier, features });
  app.get("/health/live", async () => ({ status: "ok" }));
  app.get("/health/ready", async (_request, reply) => {
   if (!pool) return reply.code(503).send({ status: "not_ready", reason: "database_not_configured" });
