@@ -5,6 +5,8 @@ import helmet from "@fastify/helmet";
 import pg from "pg";
 import { randomUUID } from "node:crypto";
 import { loadFeatureConfig } from "./config/features.js";
+import { createAccessTokenVerifier, AuthenticationConfigurationError } from "./auth/jwt.js";
+import { verifyRequestPrincipal } from "./auth/fastify-auth.js";
 
 const { Pool } = pg;
 function requiredEnv(name: string): string {
@@ -24,6 +26,11 @@ export async function buildServer() {
  const origins = (process.env.CORS_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
  await app.register(cors, { origin: origins.length ? origins : false, credentials: false });
  const features = loadFeatureConfig();
+ let accessTokenVerifier: ReturnType<typeof createAccessTokenVerifier> | null = null;
+ try { accessTokenVerifier = createAccessTokenVerifier(); }
+ catch (error) {
+  if (!(error instanceof AuthenticationConfigurationError)) throw error;
+ }
  let pool: pg.Pool | undefined;
  if (process.env.DATABASE_URL?.trim()) {
   const options: pg.PoolConfig = { connectionString: requiredEnv("DATABASE_URL"), max: 10, connectionTimeoutMillis: 3000, idleTimeoutMillis: 30000 };
@@ -36,6 +43,17 @@ export async function buildServer() {
   if (!pool) return reply.code(503).send({ status: "not_ready", reason: "database_not_configured" });
   try { await pool.query("SELECT 1"); return { status: "ready" }; }
   catch { return reply.code(503).send({ status: "not_ready", reason: "database_unavailable" }); }
+ });
+ app.get("/v1/me", async (request, reply) => {
+  const principal = await verifyRequestPrincipal(request, reply, accessTokenVerifier);
+  if (!principal) return;
+  if (!pool) return reply.code(503).send({ error: { code: "DATABASE_NOT_CONFIGURED", message: "Account service is unavailable." } });
+  const issuer = principal.claims.iss;
+  if (typeof issuer !== "string") return reply.code(401).send({ error: { code: "INVALID_TOKEN", message: "The access token has no issuer." } });
+  const result = await pool.query("SELECT id, display_name, role, status FROM app_users WHERE auth_issuer = $1 AND auth_subject = $2 LIMIT 1", [issuer, principal.subject]);
+  const user = result.rows[0] as { id: string; display_name: string; role: string; status: string } | undefined;
+  if (!user || user.status !== "ACTIVE") return reply.code(403).send({ error: { code: "ACCOUNT_UNAVAILABLE", message: "The account is not provisioned or is not active." } });
+  return { id: user.id, displayName: user.display_name, role: user.role, status: user.status };
  });
  // Presentation hints only; secrets are never returned and these flags are not authorization.
  app.get("/v1/capabilities", async () => ({
