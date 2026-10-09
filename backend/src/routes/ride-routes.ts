@@ -215,6 +215,7 @@ export async function registerRideRoutes(app: FastifyInstance, deps: Dependencie
    const ride = selected.rows[0] as { id: string; driver_id: string | null; status: RideStatus; version: number; start_pin_hash: string | null } | undefined;
    if (!ride) { await client.query("ROLLBACK"); return reply.code(404).send({ error: { code: "RIDE_NOT_FOUND", message: "Ride not found." } }); }
    if (ride.driver_id !== account.id) { await client.query("ROLLBACK"); return reply.code(403).send({ error: { code: "RIDE_FORBIDDEN", message: "Only the assigned driver can update this ride." } }); }
+   if (ride.status === body.data.status) { await client.query("ROLLBACK"); return { id: ride.id, status: ride.status, version: ride.version }; }
    try { assertTransition(ride.status, body.data.status); }
    catch { await client.query("ROLLBACK"); return reply.code(409).send({ error: { code: "INVALID_RIDE_TRANSITION", message: "This ride cannot move to the requested status." } }); }
    if (body.data.status === "IN_PROGRESS") {
