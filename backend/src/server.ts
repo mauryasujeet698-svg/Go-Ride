@@ -50,13 +50,3 @@ export async function buildServer() {
  app.addHook("onClose", async () => { if (pool) await pool.end(); });
  return { app, host, port };
 }
-async function main() {
- const { app, host, port } = await buildServer();
- await app.listen({ host, port });
-}
-if (process.env.NODE_ENV !== "test") {
- main().catch((error: unknown) => {
-  process.stderr.write("Go-Ride API failed to start: " + (error instanceof Error ? error.message : "unknown error") + "\n");
-  process.exitCode = 1;
- });
-}
