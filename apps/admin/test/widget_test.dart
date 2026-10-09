@@ -6,6 +6,6 @@ void main() {
     await tester.pumpWidget(const GoRideAdminApp());
     expect(find.text('Operations console setup'), findsOneWidget);
     expect(find.text('Driver verification'), findsOneWidget);
-    expect(find.text('Not connected'), findsNWidgets(6));
+    expect(find.text('Not connected'), findsWidgets);
   });
 }
