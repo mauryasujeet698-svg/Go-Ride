@@ -1,33 +1,48 @@
 # Go-Ride
 
-Production-oriented ride-hailing customer application foundation.
+Go-Ride is an original Flutter/Dart ride-hailing customer app being developed toward a production-grade service. Mature ride platforms are product-quality benchmarks; Go-Ride has its own implementation and identity.
 
-## Current status
+## Current engineering status
 
-- Batch 1: domain foundation — frozen
-- Batch 2: application synchronization + RideBloc — frozen
-- Batch 3: infrastructure — not started
+**Status: foundation and customer UI scaffold; not production-ready.**
+
+Implemented foundations include ride-domain models, state-machine/reconciliation contracts, application use cases, a RideBloc, provider interfaces, unit tests, and GitHub Actions quality/build workflows.
+
+The current customer UI still contains prototype-only behaviour. Fare estimates are not route-based, booking state is not persisted by a live backend, and the app does not yet integrate a real map/GPS/routing provider or driver matching service. A successful APK build is not proof of a complete ride journey.
 
 ## Architecture principles
 
-REST snapshots are authoritative. Realtime is a transport layer and is reconciled against the authoritative ride version.
-
-The project is intentionally structured so HTTP, realtime, authentication, maps, routing and persistence implementations can be added behind interfaces without leaking vendor types into the domain.
+- The backend will be authoritative for fare quotations and ride state.
+- REST snapshots are the recovery source of truth; realtime events are reconciled against server versions.
+- Map rendering, place search, geocoding, routing, authentication, persistence and realtime transport must sit behind replaceable interfaces.
+- The customer app is first; the shared API/data model must support separate driver and admin apps later.
+- Keep a modular architecture. Do not introduce microservices without a concrete need.
+- Never commit API keys, credentials, signing keys or production secrets.
 
 ## Development
 
-This repository currently contains the frozen Batch 1/2 contracts and tests. Generated Freezed files are intentionally not committed.
+Prerequisites: a current stable Flutter SDK and Dart version compatible with pubspec.yaml.
 
-Run:
+    flutter pub get
+    dart run build_runner build --delete-conflicting-outputs
+    flutter analyze
+    flutter test
+    flutter build apk --release
 
-`flutter pub get`
+Generated Freezed files are generated during CI and are intentionally not committed.
 
-`dart run build_runner build --delete-conflicting-outputs`
+## GitHub workflow
 
-`flutter analyze`
+- Go-Ride Quality Gate runs dependency installation, code generation, static analysis and tests on pull requests targeting main and pushes to main.
+- Go-Ride Android Build builds a release APK for pull requests and pushes to main, and can be started manually from Actions.
+- Build artifacts include the source commit and APK checksum metadata. Artifacts are temporary; download and archive a release you intend to keep.
+- Keep workflow token permissions minimal and review workflow changes like application code.
+- Protect main in GitHub repository settings: require pull requests, require the Quality Gate check, and disallow force pushes/deletions. If GitHub settings cannot be configured by automation, the repository owner must enable these controls manually.
 
-`flutter test`
+## Delivery roadmap
 
-Do not add secrets, API keys, credentials or signing material to this public repository.
+See docs/ROADMAP.md for the phased plan and acceptance criteria.
 
-Batch 3 must not be started until the current repository has passed independent architecture/security review.
+## Definition of done
+
+A feature is complete only when its behaviour is implemented and relevant tests pass. Screens, local demo state and successful compilation do not count as completed backend functionality. Production readiness requires deployed/configured services and end-to-end ride journey validation.
