@@ -1,58 +1,47 @@
-name: Go-Ride Engineering Checks
+name: Go-Ride Customer App Checks
 
 on:
   push:
     branches:
       - 'engineering/**'
     paths:
-      - 'backend/**'
-      - 'apps/**'
       - 'lib/**'
       - 'test/**'
+      - 'assets/**'
+      - 'tool/**'
       - 'pubspec.yaml'
-      - 'analysis_options.yaml'
       - 'pubspec.lock'
+      - 'analysis_options.yaml'
       - '.github/workflows/engineering-checks.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: engineering-checks-${{ github.ref }}
+  group: customer-app-checks-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend typecheck and tests (no release build)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install dependencies
-        run: npm install
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Tests
-        run: npm test
-
   customer:
-    name: Customer app tests and debug APK
+    name: Customer app analyze, tests and debug APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - run: flutter pub get
-      - run: dart run build_runner build --delete-conflicting-outputs
-      - run: flutter analyze
-      - run: flutter test
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate Freezed code
+        run: dart run build_runner build --delete-conflicting-outputs
+      - name: Analyze
+        run: flutter analyze
+      - name: Tests
+        run: flutter test
       - name: Generate Android platform
         run: flutter create --platforms=android --org com.goride .
       - name: Configure Android location permissions
@@ -64,59 +53,5 @@ jobs:
         with:
           name: go-ride-customer-debug-${{ github.sha }}
           path: build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
-
-  driver-partner:
-    name: Driver Partner app tests and debug APK
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/driver_partner
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Generate Android platform
-        run: flutter create --platforms=android --org com.goride .
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
-      - name: Build Driver Partner debug APK
-        run: flutter build apk --debug
-      - name: Upload Driver Partner debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-ride-driver-partner-debug-${{ github.sha }}
-          path: apps/driver_partner/build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
-
-  admin:
-    name: Admin app tests and debug APK
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/admin
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Generate Android platform
-        run: flutter create --platforms=android --org com.goride .
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
-      - name: Build Admin debug APK
-        run: flutter build apk --debug
-      - name: Upload Admin debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-ride-admin-debug-${{ github.sha }}
-          path: apps/admin/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 7
