@@ -21,15 +21,46 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.text('Trips'));
-      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('Your trips'), findsOneWidget);
       expect(find.text('No trips yet'), findsOneWidget);
 
       await tester.tap(find.text('Profile'));
-      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('Profile'), findsOneWidget);
       expect(find.text('Guest rider'), findsOneWidget);
       expect(find.text('Help & support'), findsOneWidget);
+    });
+
+    testWidgets('requires both locations before opening ride review', (tester) async {
+      await tester.pumpWidget(const GoRideApp());
+      await tester.pump();
+
+      await tester.ensureVisible(find.text('Continue'));
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+
+      expect(find.text('Please enter both pickup and destination.'), findsOneWidget);
+      expect(find.text('Review ride'), findsNothing);
+    });
+
+    testWidgets('labels the local request as a demo, not a live booking', (tester) async {
+      await tester.pumpWidget(const GoRideApp());
+      await tester.pump();
+
+      await tester.enterText(find.widgetWithText(TextField, 'Pickup location'), 'Prayagraj Station');
+      await tester.enterText(find.widgetWithText(TextField, 'Destination'), 'Civil Lines');
+      await tester.ensureVisible(find.text('Continue'));
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      expect(find.text('Review ride'), findsOneWidget);
+      expect(find.text('Illustrative demo fare'), findsOneWidget);
+      await tester.tap(find.text('Preview request flow'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      expect(find.text('Demo request created'), findsOneWidget);
+      expect(find.text('No driver was contacted. Real ride requests require the backend, driver app and dispatch service.'), findsOneWidget);
     });
   });
 }
