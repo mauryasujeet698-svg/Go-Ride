@@ -2,7 +2,7 @@ name: Go-Ride Android Build
 
 on:
   push:
-    branches: [batch-2-hardening]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -10,10 +10,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-apk:
+    name: Build release APK
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,10 +41,27 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
-      - name: Upload APK
+      - name: Create build provenance metadata
+        shell: bash
+        run: |
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "ref=${GITHUB_REF}"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_attempt=${GITHUB_RUN_ATTEMPT}"
+            echo "built_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            grep '^version:' pubspec.yaml
+            sha256sum build/app/outputs/flutter-apk/app-release.apk
+          } > release-metadata.txt
+          cat release-metadata.txt
+
+      - name: Upload APK and metadata
         uses: actions/upload-artifact@v4
         with:
-          name: go-ride-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: go-ride-release-${{ github.sha }}
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            release-metadata.txt
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
