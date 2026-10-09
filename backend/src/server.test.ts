@@ -16,6 +16,7 @@ test("liveness and capability endpoints work without claiming database readiness
   assert.deepEqual(live.json(), { status: "ok" });
   const ready = await app.inject({ method: "GET", url: "/health/ready" });
   assert.equal(ready.statusCode, 503);
+  assert.equal(ready.json().reason, "authentication_not_configured");
   const capabilities = await app.inject({ method: "GET", url: "/v1/capabilities" });
   assert.equal(capabilities.statusCode, 200);
   assert.equal(capabilities.json().payments.enabled, false);
