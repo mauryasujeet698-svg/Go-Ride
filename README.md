@@ -34,7 +34,7 @@ Generated Freezed files are generated during CI and are intentionally not commit
 
 ## GitHub workflow
 
-- Go-Ride Engineering Checks runs backend typecheck/tests, Customer analyze/tests, and Driver Partner/Admin analyze/tests plus Android debug-build smoke tests on engineering branches. These checks do not create release APKs.
+- Go-Ride Customer App Checks runs Flutter code generation, static analysis, Customer widget/unit tests, and a Customer debug APK build on engineering-branch Customer code changes. The debug APK is uploaded as a short-lived artifact for review; this is not a release build. Backend and Driver Partner/Admin code are preserved for their later approved phases.
 - Go-Ride Quality Gate runs dependency installation, code generation, static analysis and tests on pull requests targeting main and pushes to main.
 - Go-Ride Android Build builds a release APK for pull requests and pushes to main, and can be started manually from Actions.
 - Build artifacts include the source commit and APK checksum metadata. Artifacts are temporary; download and archive a release you intend to keep.
