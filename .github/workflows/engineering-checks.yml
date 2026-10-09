@@ -71,6 +71,8 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      - name: Android debug build smoke test
+        run: flutter build apk --debug
 
   admin:
     name: Admin app analyze and tests
@@ -89,3 +91,5 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      - name: Android debug build smoke test
+        run: flutter build apk --debug
