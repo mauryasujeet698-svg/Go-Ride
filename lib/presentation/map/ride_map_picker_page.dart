@@ -54,7 +54,7 @@ class RideMapPreview extends StatelessWidget {
               children: [
                 TileLayer(
                   urlTemplate: _tileUrl,
-                  userAgentPackageName: 'com.goride.app',
+                  userAgentPackageName: 'com.goride.go_ride',
                 ),
                 MarkerLayer(
                   markers: _buildMarkers(
@@ -277,7 +277,7 @@ class _RideMapPickerPageState extends State<RideMapPickerPage> {
               children: [
                 TileLayer(
                   urlTemplate: _tileUrl,
-                  userAgentPackageName: 'com.goride.app',
+                  userAgentPackageName: 'com.goride.go_ride',
                 ),
                 MarkerLayer(
                   markers: _buildMarkers(
