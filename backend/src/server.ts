@@ -52,6 +52,11 @@ export async function buildServer() {
  app.get("/health/live", async () => ({ status: "ok" }));
  app.get("/health/ready", async (_request, reply) => {
   if (!pool) return reply.code(503).send({ status: "not_ready", reason: "database_not_configured" });
+  if (!accessTokenVerifier) return reply.code(503).send({ status: "not_ready", reason: "authentication_not_configured" });
+  if (features.maps.routing && !routingProvider) return reply.code(503).send({ status: "not_ready", reason: "routing_not_configured" });
+  if (features.dispatch.enabled && (!process.env.RIDE_PIN_SECRET || process.env.RIDE_PIN_SECRET.trim().length < 32)) {
+   return reply.code(503).send({ status: "not_ready", reason: "pickup_verification_not_configured" });
+  }
   try { await pool.query("SELECT 1"); return { status: "ready" }; }
   catch { return reply.code(503).send({ status: "not_ready", reason: "database_unavailable" }); }
  });
