@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomInt } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
 import { z } from "zod";
@@ -55,6 +55,8 @@ export async function registerRideRoutes(app: FastifyInstance, deps: Dependencie
   if (!deps.features.dispatch.enabled) return reply.code(503).send({ error: { code: "DISPATCH_UNAVAILABLE", message: "Driver matching is not enabled for this environment." } });
   const parsed = createRideSchema.safeParse(request.body);
   if (!parsed.success) return reply.code(400).send({ error: { code: "INVALID_REQUEST", message: "A valid fare quote and idempotency key are required." } });
+  const pinSecret = process.env.RIDE_PIN_SECRET?.trim();
+  if (!pinSecret || pinSecret.length < 32) return reply.code(503).send({ error: { code: "RIDE_PIN_NOT_CONFIGURED", message: "Pickup verification is not configured; no ride was booked." } });
   const pool = deps.pool!;
   const requestHash = createHash("sha256").update(JSON.stringify({ fareQuoteId: parsed.data.fareQuoteId })).digest("hex");
   const client = await pool.connect();
@@ -102,16 +104,19 @@ export async function registerRideRoutes(app: FastifyInstance, deps: Dependencie
     return reply.code(409).send({ error: { code: "NO_DRIVER_AVAILABLE", message: "No verified available driver was found nearby. No ride was booked; please try again shortly." } });
    }
 
+   const rideId = (await client.query("SELECT gen_random_uuid() AS id")).rows[0].id as string;
+   const pickupPin = String(randomInt(0, 10000)).padStart(4, "0");
+   const pickupPinHash = createHmac("sha256", pinSecret).update(rideId + ":" + pickupPin).digest("hex");
    const rideResult = await client.query(
-    "INSERT INTO rides (rider_id, driver_id, fare_quote_id, status, version, pickup, dropoff, currency, final_amount_minor, assigned_at) VALUES ($1,$2,$3,'DRIVER_ASSIGNED',1,ST_SetSRID(ST_MakePoint($4,$5),4326)::geography,ST_SetSRID(ST_MakePoint($6,$7),4326)::geography,$8,$9,now()) RETURNING id, status, version, requested_at, assigned_at",
-    [account.id, driver.user_id, quote.id, quote.pickup_lon, quote.pickup_lat, quote.dropoff_lon, quote.dropoff_lat, quote.currency, quote.amount_minor]
+    "INSERT INTO rides (id, rider_id, driver_id, fare_quote_id, status, version, pickup, dropoff, currency, final_amount_minor, start_pin_hash, assigned_at) VALUES ($1,$2,$3,$4,'DRIVER_ASSIGNED',1,ST_SetSRID(ST_MakePoint($5,$6),4326)::geography,ST_SetSRID(ST_MakePoint($7,$8),4326)::geography,$9,$10,$11,now()) RETURNING id, status, version, requested_at, assigned_at",
+    [rideId, account.id, driver.user_id, quote.id, quote.pickup_lon, quote.pickup_lat, quote.dropoff_lon, quote.dropoff_lat, quote.currency, quote.amount_minor, pickupPinHash]
    );
    const ride = rideResult.rows[0] as { id: string; status: RideStatus; version: number; requested_at: Date; assigned_at: Date };
    await client.query("UPDATE driver_profiles SET is_available = false, updated_at = now() WHERE user_id = $1", [driver.user_id]);
    await client.query("INSERT INTO ride_events (ride_id, version, actor_user_id, event_type, payload) VALUES ($1,1,$2,'DRIVER_ASSIGNED',jsonb_build_object('driverId',$3::text))", [ride.id, account.id, driver.user_id]);
    const responseBody = {
     id: ride.id, status: ride.status, version: ride.version,
-    driverAssigned: true, fare: { amountMinor: Number(quote.amount_minor), currency: quote.currency },
+    driverAssigned: true, pickupPin, fare: { amountMinor: Number(quote.amount_minor), currency: quote.currency },
     requestedAt: ride.requested_at, assignedAt: ride.assigned_at
    };
    await client.query("UPDATE idempotency_records SET response_status = 201, response_body = $3::jsonb WHERE principal_id = $1 AND idempotency_key = $2", [account.id, parsed.data.idempotencyKey, JSON.stringify(responseBody)]);
