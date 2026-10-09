@@ -7,11 +7,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node --test dist/domain/ride-state.test.js dist/config/features.test.js dist/server.test.js"
+    "test": "npm run build && node --test dist/domain/ride-state.test.js dist/config/features.test.js dist/server.test.js dist/payments/webhook-signature.test.js dist/auth/jwt.test.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
@@ -19,7 +19,8 @@
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "pg": "^8.13.1",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "jose": "^6.0.8"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
