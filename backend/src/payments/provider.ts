@@ -21,7 +21,8 @@ export interface CreatePaymentIntent {
 
 export interface ProviderPaymentIntent {
   provider: string;
-  providerPaymentId: string;
+  providerOrderId: string;
+  providerPaymentId?: string;
   status: PaymentStatus;
   checkoutUrl?: string;
 }
