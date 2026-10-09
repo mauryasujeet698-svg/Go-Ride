@@ -66,6 +66,10 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Generate Android platform for validation
+        run: flutter create --platforms=android --org com.goride .
+      - name: Generate Android platform for validation
+        run: flutter create --platforms=android --org com.goride .
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
