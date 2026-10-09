@@ -27,3 +27,14 @@ android/app/*.keystore
 *.pfx
 .env
 .env.*
+
+# Backend local secrets and generated artifacts
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/node_modules/
+backend/dist/
+backend/coverage/
+apps/**/.dart_tool/
+apps/**/build/
+apps/**/pubspec.lock
