@@ -10,6 +10,7 @@ on:
       - 'lib/**'
       - 'test/**'
       - 'pubspec.yaml'
+      - 'analysis_options.yaml'
       - 'pubspec.lock'
       - '.github/workflows/engineering-checks.yml'
 
