@@ -7,8 +7,8 @@ test("liveness and capability endpoints work without claiming database readiness
  const previousMode = process.env.FEATURE_PAYMENTS_MODE;
  const previousEnabled = process.env.FEATURE_PAYMENTS_ENABLED;
  delete process.env.DATABASE_URL;
- process.env.FEATURE_PAYMENTS_MODE = "disabled";
- process.env.FEATURE_PAYMENTS_ENABLED = "false";
+ process.env.FEATURE_PAYMENTS_MODE = "live";
+ process.env.FEATURE_PAYMENTS_ENABLED = "true";
  const { app } = await buildServer();
  try {
   const live = await app.inject({ method: "GET", url: "/health/live" });
@@ -20,6 +20,7 @@ test("liveness and capability endpoints work without claiming database readiness
   assert.equal(capabilities.statusCode, 200);
   assert.equal(capabilities.json().payments.enabled, false);
   assert.equal(capabilities.json().payments.mode, "disabled");
+  assert.deepEqual(capabilities.json().payments.methods, []);
   const missing = await app.inject({ method: "GET", url: "/v1/rides" });
   assert.equal(missing.statusCode, 404);
   const protectedRide = await app.inject({ method: "POST", url: "/v1/rides", payload: { fareQuoteId: "00000000-0000-4000-8000-000000000000", idempotencyKey: "test-idempotency-key-123" } });
