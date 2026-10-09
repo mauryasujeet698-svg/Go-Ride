@@ -14,5 +14,5 @@ test("applies minimum fare and rejects absent or invalid routes", () => {
 });
 test("rejects malformed fare policy environment values", () => {
  assert.throws(() => loadFarePolicy({ FARE_BASE_MINOR: "-3" }));
- assert.throws(() => loadFarePolicy({ FARE_CURRENCY: "rupees" }).currency === "rupees" ? new Error("expected INR validation") : undefined);
+ assert.throws(() => calculateFare({ distanceMeters: 1000, durationSeconds: 60 }, { ...policy, currency: "rupees" }));
 });
