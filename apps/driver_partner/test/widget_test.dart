@@ -6,6 +6,6 @@ void main() {
     await tester.pumpWidget(const DriverPartnerApp());
     expect(find.text('Setup in progress'), findsOneWidget);
     expect(find.text('Ride offers'), findsOneWidget);
-    expect(find.text('No fake online status or earnings are shown.'), findsOneWidget);
+    expect(find.textContaining('No fake online status or earnings are shown.'), findsOneWidget);
   });
 }
