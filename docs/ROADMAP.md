@@ -1,6 +1,6 @@
 # Go-Ride delivery roadmap
 
-This is the delivery order for the customer Android app and its shared platform. Driver and admin apps remain separate future clients.
+This is the delivery order for three separate apps (Customer, Driver Partner, Admin) and their shared backend. All app shells and backend foundations remain incomplete until real integrations and verification are complete.
 
 ## Phase 0 — Repository and engineering baseline
 
@@ -39,7 +39,8 @@ Acceptance: no fabricated routes or distances; tested journeys cover the intende
 - [ ] Define authenticated API contracts and persistent rider/booking/quote records.
 - [ ] Implement server-authoritative fare quotes and ride state transitions.
 - [ ] Add idempotent booking intent, race-safe cancellation, audit events and authorization.
-- [ ] Define driver matching and telemetry contracts for the future driver app.
+- [ ] Define driver matching and telemetry contracts and implement the separate Driver Partner app.
+- [ ] Implement the separate Admin app with server-enforced RBAC, support/safety case handling and audited feature configuration.
 - [ ] Add realtime delivery plus REST snapshot recovery and reconnect behaviour.
 
 Acceptance: integration tests prove durable bookings, duplicate-request safety, fare authority, valid transitions and recovery after timeouts/reconnects.
@@ -59,7 +60,8 @@ Acceptance: end-to-end test completes booking through ride completion against a 
 - [ ] Implement customer support request lifecycle and operational ownership.
 - [ ] Define SOS, emergency contact and trip-sharing workflows with appropriate privacy controls.
 - [ ] Implement cash settlement records where applicable.
-- [ ] Integrate UPI/payment provider only after backend reconciliation and refund/failure flows are designed.
+- [ ] Implement provider-neutral payment contracts and sandbox integration; keep live payments disabled until account activation, credentials, webhook verification, reconciliation and refunds are verified.
+- [ ] Implement server-side feature availability enforcement across all three apps.
 
 Acceptance: support/safety/payment workflows have verified server-side records, permission checks, failure handling and operational runbooks.
 
