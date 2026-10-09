@@ -1,0 +1,50 @@
+services:
+  database:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: goride
+      POSTGRES_USER: goride
+      POSTGRES_PASSWORD: local_only_change_me
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - goride-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goride -d goride"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: "8080"
+      DATABASE_URL: postgres://goride:local_only_change_me@database:5432/goride
+      DATABASE_SSL: "false"
+      CORS_ORIGINS: http://localhost:3000
+      FEATURE_PAYMENTS_ENABLED: "false"
+      FEATURE_PAYMENTS_MODE: disabled
+      FEATURE_PAYMENT_UPI_ENABLED: "false"
+      FEATURE_PAYMENT_CARDS_ENABLED: "false"
+      FEATURE_PAYMENT_NETBANKING_ENABLED: "false"
+      FEATURE_PAYMENT_CASH_ENABLED: "false"
+      FEATURE_MAP_SEARCH_ENABLED: "false"
+      FEATURE_ROUTING_ENABLED: "false"
+      FEATURE_DRIVER_DISPATCH_ENABLED: "false"
+      FEATURE_CUSTOMER_SUPPORT_ENABLED: "false"
+      FEATURE_DRIVER_SUPPORT_ENABLED: "false"
+      FEATURE_SAFETY_SOS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  goride-postgres:
