@@ -7,7 +7,7 @@ This is the shared TypeScript/Fastify API foundation for the **Customer, Driver 
 | Endpoint | Purpose | Important behavior |
 | --- | --- | --- |
 | `GET /health/live` | Process liveness | Does not prove dependencies are ready |
-| `GET /health/ready` | Database readiness | Returns 503 if the database is missing or unavailable |
+| `GET /health/ready` | Service readiness | Returns 503 if the database or authentication is missing, or an enabled routing/dispatch dependency is not configured |
 | `GET /v1/capabilities` | App presentation hints | Flags are not authorization; server routes enforce their own checks |
 | `GET /v1/me` | Resolve authenticated account | Requires a valid configured OIDC/JWT verifier and an active provisioned account |
 | `POST /v1/fare-quotes` | Create a server-calculated fare quote | Requires customer role, database, routing flag and configured road-routing provider |
