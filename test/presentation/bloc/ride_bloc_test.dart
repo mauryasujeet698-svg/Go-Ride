@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:go_ride/core/error/failures.dart';
 import 'package:go_ride/core/result/result.dart';
 import 'package:go_ride/domain/enums/ride_status.dart';
+import 'package:go_ride/domain/events/telemetry.dart';
 import 'package:go_ride/application/sync/ride_sync_coordinator.dart';
 import 'package:go_ride/presentation/bloc/ride/ride_bloc.dart';
 import 'package:go_ride/presentation/bloc/ride/ride_event.dart';
@@ -27,7 +28,8 @@ void main() {
     cancel = MockCancelRideUseCase();
     sync = MockRideSyncCoordinator();
     syncStates = StreamController<SyncState>.broadcast();
-    when(() => sync.syncStream).thenReturn(syncStates.stream);
+    when(() => sync.syncStream).thenAnswer((_) => syncStates.stream);
+    when(() => sync.telemetryStream).thenAnswer((_) => const Stream<DriverTelemetry>.empty());
     when(() => sync.startSync()).thenAnswer((_) async {});
     when(() => sync.disconnect()).thenAnswer((_) async {});
     when(() => sync.dispose()).thenAnswer((_) async {});

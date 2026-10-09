@@ -1,94 +1,154 @@
 import 'dart:async';
+
 import '../../core/error/failures.dart';
 import '../../domain/entities/ride.dart';
 import '../../domain/events/realtime_events.dart';
+import '../../domain/events/telemetry.dart';
 import '../../domain/state_machine/reconciliation.dart';
 import '../../domain/services/i_auth_session_provider.dart';
 import '../../domain/services/i_realtime_service.dart';
 import '../usecases/ride_usecases.dart';
 
 sealed class SyncState {}
-class SyncIdle extends SyncState {}
-class Syncing extends SyncState {}
-class SyncSuccess extends SyncState { final Ride ride; SyncSuccess(this.ride); }
-class SyncFailed extends SyncState { final Failure failure; SyncFailed(this.failure); }
+
+class SyncIdle extends SyncState {
+  SyncIdle();
+}
+
+class Syncing extends SyncState {
+  Syncing();
+}
+
+class SyncSuccess extends SyncState {
+  final Ride ride;
+  SyncSuccess(this.ride);
+}
+
+class SyncFailed extends SyncState {
+  final Failure failure;
+  SyncFailed(this.failure);
+}
 
 enum BufferProcessingResult { success, resyncRequired }
 
 class RideSyncCoordinator {
+  static const int _maxResyncAttempts = 3;
+
   final GetActiveRideUseCase _getActiveRide;
   final IRealtimeService _realtimeService;
   final IAuthSessionProvider _authProvider;
   final _stateController = StreamController<SyncState>.broadcast();
-  final List<RideStateChanged> _eventBuffer = [];
+  final _telemetryController = StreamController<DriverTelemetry>.broadcast();
+  final List<RideStateChanged> _eventBuffer = <RideStateChanged>[];
+
   bool _isFetchingSnapshot = false;
   bool _resyncRequested = false;
-  int _consecutiveResyncs = 0;
   Ride? _authoritativeRide;
-  StreamSubscription? _wsSubscription;
+  StreamSubscription<DomainRealtimeEvent>? _wsSubscription;
 
-  RideSyncCoordinator(this._getActiveRide, this._realtimeService, this._authProvider);
+  RideSyncCoordinator(
+    this._getActiveRide,
+    this._realtimeService,
+    this._authProvider,
+  );
+
   Stream<SyncState> get syncStream => _stateController.stream;
+  Stream<DriverTelemetry> get telemetryStream => _telemetryController.stream;
   Ride? get currentRide => _authoritativeRide;
 
   Future<void> startSync() async {
-    if (_isFetchingSnapshot) return;
-    if (_consecutiveResyncs >= 3) {
-      _stateController.add(SyncFailed(const ReconciliationFailure('Infinite resync loop detected.')));
+    if (_isFetchingSnapshot) {
+      _resyncRequested = true;
       return;
     }
+
     _isFetchingSnapshot = true;
     _stateController.add(Syncing());
 
-    final connSuccess = await _ensureRealtimeConnection();
-    if (!connSuccess) {
-      _isFetchingSnapshot = false;
-      return;
-    }
+    try {
+      for (var attempt = 0; attempt < _maxResyncAttempts; attempt++) {
+        _resyncRequested = false;
 
-    final result = await _getActiveRide();
-    await result.fold(
-      (snapshot) async {
-        if (snapshot != null) {
-          _authoritativeRide = snapshot;
-          await _realtimeService.subscribeToRide(snapshot.id);
-          final bufferResult = _processBuffer();
-          if (bufferResult == BufferProcessingResult.resyncRequired) {
-            _isFetchingSnapshot = false;
-            _consecutiveResyncs++;
-            await startSync();
-          } else {
-            _consecutiveResyncs = 0;
+        final connected = await _ensureRealtimeConnection();
+        if (!connected) return;
+
+        final result = await _getActiveRide();
+        var retryRequired = false;
+        var terminal = false;
+
+        await result.fold(
+          (snapshot) async {
+            if (snapshot == null) {
+              _authoritativeRide = null;
+              _eventBuffer.clear();
+              _stateController.add(SyncIdle());
+              terminal = true;
+              return;
+            }
+
+            _authoritativeRide = snapshot;
+
+            final subscribeResult =
+                await _realtimeService.subscribeToRide(snapshot.id);
+            final subscribed = subscribeResult.fold(
+              (_) => true,
+              (failure) {
+                _stateController.add(SyncFailed(failure));
+                return false;
+              },
+            );
+
+            if (!subscribed) {
+              terminal = true;
+              return;
+            }
+
+            final bufferResult = _processBuffer();
+            if (bufferResult == BufferProcessingResult.resyncRequired) {
+              retryRequired = true;
+              return;
+            }
+
             _stateController.add(SyncSuccess(_authoritativeRide!));
-          }
-        } else {
-          _authoritativeRide = null;
-          _eventBuffer.clear();
-          _consecutiveResyncs = 0;
-          _stateController.add(SyncIdle());
-        }
-      },
-      (failure) async {
-        _stateController.add(SyncFailed(failure));
-      },
-    );
+          },
+          (failure) async {
+            _stateController.add(SyncFailed(failure));
+            terminal = true;
+          },
+        );
 
-    _isFetchingSnapshot = false;
-    if (_resyncRequested) {
-      _resyncRequested = false;
-      await startSync();
+        if (terminal) return;
+        if (_resyncRequested) retryRequired = true;
+        if (!retryRequired) return;
+
+        if (attempt == _maxResyncAttempts - 1) {
+          _stateController.add(
+            SyncFailed(
+              const ReconciliationFailure(
+                'Unable to reconcile the ride after bounded recovery attempts.',
+              ),
+            ),
+          );
+          return;
+        }
+      }
+    } finally {
+      _isFetchingSnapshot = false;
     }
   }
 
   Future<bool> _ensureRealtimeConnection() async {
     if (_wsSubscription != null) return true;
+
     final tokenResult = await _authProvider.getValidToken();
     return tokenResult.fold(
       (token) async {
-        final connectResult = await _realtimeService.connectAuthenticated(token);
+        final connectResult =
+            await _realtimeService.connectAuthenticated(token);
         return connectResult.fold(
           (_) {
-            _wsSubscription = _realtimeService.eventStream.listen(_onRealtimeEvent);
+            _wsSubscription =
+                _realtimeService.eventStream.listen(_onRealtimeEvent);
             return true;
           },
           (failure) {
@@ -105,20 +165,43 @@ class RideSyncCoordinator {
   }
 
   void _onRealtimeEvent(DomainRealtimeEvent event) {
-    if (event is! RideStateChanged) return;
-    if (_isFetchingSnapshot) {
-      _eventBuffer.add(event);
-    } else {
-      _reconcileLiveEvent(event);
+    if (event is TelemetryUpdated) {
+      if (_authoritativeRide?.id == event.telemetry.rideId) {
+        _telemetryController.add(event.telemetry);
+      }
+      return;
     }
+
+    if (event is! RideStateChanged) return;
+
+    if (_isFetchingSnapshot) {
+      if (_authoritativeRide == null ||
+          event.incomingRide.id == _authoritativeRide!.id) {
+        _eventBuffer.add(event);
+      }
+      return;
+    }
+
+    _reconcileLiveEvent(event);
   }
 
   BufferProcessingResult _processBuffer() {
-    _eventBuffer.sort((a, b) => a.incomingRide.version.compareTo(b.incomingRide.version));
+    _eventBuffer.sort(
+      (a, b) => a.incomingRide.version.compareTo(b.incomingRide.version),
+    );
+
     var finalResult = BufferProcessingResult.success;
     for (final event in _eventBuffer) {
-      if (_authoritativeRide == null || event.incomingRide.id != _authoritativeRide!.id) continue;
-      final result = RideReconciler.reconcile(local: _authoritativeRide!, incoming: event.incomingRide);
+      if (_authoritativeRide == null ||
+          event.incomingRide.id != _authoritativeRide!.id) {
+        continue;
+      }
+
+      final result = RideReconciler.reconcile(
+        local: _authoritativeRide!,
+        incoming: event.incomingRide,
+      );
+
       switch (result) {
         case ReconciliationResult.applied:
           _authoritativeRide = event.incomingRide;
@@ -130,39 +213,52 @@ class RideSyncCoordinator {
           finalResult = BufferProcessingResult.resyncRequired;
           break;
       }
+
       if (finalResult == BufferProcessingResult.resyncRequired) break;
     }
+
     _eventBuffer.clear();
     return finalResult;
   }
 
   void _reconcileLiveEvent(RideStateChanged event) {
-    if (_authoritativeRide == null || event.incomingRide.id != _authoritativeRide!.id) return;
-    final result = RideReconciler.reconcile(local: _authoritativeRide!, incoming: event.incomingRide);
+    if (_authoritativeRide == null ||
+        event.incomingRide.id != _authoritativeRide!.id) {
+      return;
+    }
+
+    final result = RideReconciler.reconcile(
+      local: _authoritativeRide!,
+      incoming: event.incomingRide,
+    );
+
     switch (result) {
       case ReconciliationResult.applied:
         _authoritativeRide = event.incomingRide;
-        _consecutiveResyncs = 0;
         _stateController.add(SyncSuccess(_authoritativeRide!));
       case ReconciliationResult.stale:
       case ReconciliationResult.duplicate:
         break;
       case ReconciliationResult.gapDetected:
       case ReconciliationResult.invalidAuthoritativeState:
-        _consecutiveResyncs++;
         _resyncRequested = true;
-        if (!_isFetchingSnapshot) startSync();
+        if (!_isFetchingSnapshot) {
+          unawaited(startSync());
+        }
     }
   }
 
   Future<void> disconnect() async {
     await _wsSubscription?.cancel();
     _wsSubscription = null;
+    _eventBuffer.clear();
+    _resyncRequested = false;
     await _realtimeService.disconnect();
   }
 
   Future<void> dispose() async {
     await disconnect();
     await _stateController.close();
+    await _telemetryController.close();
   }
 }

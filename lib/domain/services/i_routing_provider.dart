@@ -3,7 +3,7 @@ import '../../core/types/coordinate.dart';
 part 'i_routing_provider.freezed.dart';
 
 @freezed
-class RouteResult with _$RouteResult {
+abstract class RouteResult with _$RouteResult {
   const factory RouteResult({
     required List<Coordinate> polyline,
     required double distanceMeters,
