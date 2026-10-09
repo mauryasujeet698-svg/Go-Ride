@@ -57,7 +57,7 @@ jobs:
           cat release-metadata.txt
 
       - name: Upload APK and metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: go-ride-release-${{ github.sha }}
           path: |
