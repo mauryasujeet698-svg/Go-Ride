@@ -24,14 +24,16 @@ Acceptance: all visible controls have defined behaviour and UI tests cover the p
 
 ## Phase 2 — Maps, places and navigation
 
-- [ ] Select a Flutter map renderer and OpenStreetMap-based data strategy.
-- [ ] Implement permission-aware GPS/current location and manual map pin selection.
-- [ ] Implement real place search/reverse geocoding through a replaceable provider.
-- [ ] Implement road routing, polyline, route distance and ETA.
+- [x] Add a Flutter map renderer (`flutter_map`) with OpenStreetMap attribution and a replaceable tile URL.
+- [x] Add foreground GPS/current-location permission handling and manual pickup/destination pin selection.
+- [x] Store selected pin coordinates in the booking draft and clear stale coordinates if a rider manually edits the corresponding text.
+- [x] Document that public OSM community endpoints are not unlimited production infrastructure.
+- [ ] Implement real place search/autocomplete and reverse geocoding through a compliant provider.
+- [ ] Implement road routing, route polyline, road distance and ETA from a real routing provider.
 - [ ] Evaluate turn-by-turn text/voice guidance, off-route detection and rerouting.
-- [ ] Document tile/geocoding/routing service policies, attribution and scaling limits.
+- [ ] Choose and load-test a launch-appropriate tile/geocoding/routing provider or a self-hosted deployment.
 
-Acceptance: no fabricated routes or distances; tested journeys cover the intended launch region; map zoom/pan and location failure paths work.
+Partial acceptance met: interactive map pan/zoom, map-pin selection and foreground location permission/error handling have been added to the app. The full phase remains open until location search, real routes/distance/ETA, provider capacity, and launch-region coverage are implemented and verified.
 
 ## Phase 3 — Shared backend and data contracts
 
