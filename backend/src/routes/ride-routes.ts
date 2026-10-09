@@ -95,7 +95,7 @@ export async function registerRideRoutes(app: FastifyInstance, deps: Dependencie
    }
 
    const driverResult = await client.query(
-    "SELECT dp.user_id FROM driver_profiles dp JOIN app_users u ON u.id = dp.user_id WHERE dp.verification_status = 'VERIFIED' AND dp.is_available = true AND u.status = 'ACTIVE' AND dp.last_location IS NOT NULL AND dp.location_recorded_at > now() - interval '2 minutes' AND ST_DWithin(dp.last_location, ST_SetSRID(ST_MakePoint($1,$2),4326)::geography, 10000) AND NOT EXISTS (SELECT 1 FROM rides r WHERE r.driver_id = dp.user_id AND r.status IN ('DRIVER_ASSIGNED','DRIVER_ARRIVING','DRIVER_ARRIVED','IN_PROGRESS')) ORDER BY ST_Distance(dp.last_location, ST_SetSRID(ST_MakePoint($1,$2),4326)::geography) ASC FOR UPDATE OF dp SKIP LOCKED LIMIT 1",
+    "SELECT dp.user_id FROM driver_profiles dp JOIN app_users u ON u.id = dp.user_id WHERE dp.verification_status = 'VERIFIED' AND dp.is_available = true AND u.status = 'ACTIVE' AND dp.last_location IS NOT NULL AND dp.location_recorded_at > now() - interval '2 minutes' AND ST_DWithin(dp.last_location, ST_SetSRID(ST_MakePoint($1,$2),4326)::geography, 10000) AND NOT EXISTS (SELECT 1 FROM rides r WHERE r.driver_id = dp.user_id AND r.status IN ('DRIVER_ASSIGNED','DRIVER_ARRIVING','DRIVER_ARRIVED','IN_PROGRESS')) ORDER BY ST_Distance(dp.last_location, ST_SetSRID(ST_MakePoint($1,$2),4326)::geography) ASC LIMIT 1 FOR UPDATE OF dp SKIP LOCKED",
     [quote.pickup_lon, quote.pickup_lat]
    );
    const driver = driverResult.rows[0] as { user_id: string } | undefined;
