@@ -28,6 +28,9 @@ test("liveness and capability endpoints work without claiming database readiness
   const protectedQuote = await app.inject({ method: "POST", url: "/v1/fare-quotes", payload: {} });
   assert.equal(protectedQuote.statusCode, 503);
   assert.equal(protectedQuote.json().error.code, "AUTH_NOT_CONFIGURED");
+  const protectedSupport = await app.inject({ method: "POST", url: "/v1/support/cases", payload: { category: "OTHER", description: "This is a test support case." } });
+  assert.equal(protectedSupport.statusCode, 503);
+  assert.equal(protectedSupport.json().error.code, "AUTH_NOT_CONFIGURED");
  } finally {
   await app.close();
   if (previousUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previousUrl;
