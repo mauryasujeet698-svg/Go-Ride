@@ -674,7 +674,7 @@ class _RideReviewPage extends StatelessWidget {
             onPressed: () {
               booking.active = true;
               booking.lastRideId =
-                  'GR-${DateTime.now().millisecondsSinceEpoch}';
+                  'DEMO-${DateTime.now().millisecondsSinceEpoch}';
               Navigator.of(context).pushReplacement(
               MaterialPageRoute<void>(
                 builder: (_) => _RideRequestStatusPage(booking: booking),
