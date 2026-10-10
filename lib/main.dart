@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_ride/core/types/coordinate.dart';
+import 'package:go_ride/infrastructure/api/go_ride_api_client.dart';
 import 'package:go_ride/presentation/map/ride_map_picker_page.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -415,6 +416,8 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
                 ),
                 const SizedBox(height: 18),
                 const _SecurityBanner(),
+                const SizedBox(height: 12),
+                const _BackendConnectionCard(),
               ]),
             ),
           ),
@@ -566,6 +569,112 @@ class _RideOptionCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BackendConnectionCard extends StatefulWidget {
+  const _BackendConnectionCard();
+
+  @override
+  State<_BackendConnectionCard> createState() => _BackendConnectionCardState();
+}
+
+class _BackendConnectionCardState extends State<_BackendConnectionCard> {
+  final GoRideApiClient _api = GoRideApiClient();
+  BackendReadiness? _readiness;
+  bool _checking = false;
+
+  @override
+  void dispose() {
+    _api.close();
+    super.dispose();
+  }
+
+  Future<void> _checkBackend() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    final result = await _api.checkReadiness();
+    if (!mounted) return;
+    setState(() {
+      _readiness = result;
+      _checking = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final readiness = _readiness;
+    final statusColor = readiness?.ready == true
+        ? GoRideApp._green
+        : const Color(0xFF667085);
+    final message = readiness?.message ??
+        (_api.isConfigured
+            ? 'Backend has not been checked yet.'
+            : 'Backend URL is not configured for this build.');
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFE4EAF0)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  readiness?.ready == true
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_off_outlined,
+                  color: statusColor,
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Backend connection',
+                    style: TextStyle(
+                      color: GoRideApp._navy,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _checking ? null : _checkBackend,
+                  child: _checking
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Check'),
+                ),
+              ],
+            ),
+            Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF667085),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'A healthy API does not by itself enable sign-in, driver dispatch or live bookings.',
+              style: TextStyle(
+                color: Color(0xFF667085),
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
         ),
       ),
     );
