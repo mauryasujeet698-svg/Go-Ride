@@ -27,7 +27,7 @@ void main() {
 
       await tester.tap(find.text('Profile'));
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('Profile'), findsOneWidget);
+      expect(find.text('Profile').first, findsOneWidget);
       expect(find.text('Guest rider'), findsOneWidget);
       expect(find.text('Help & support'), findsOneWidget);
     });
@@ -36,6 +36,11 @@ void main() {
       await tester.pumpWidget(const GoRideApp());
       await tester.pump();
 
+      await tester.drag(
+        find.byType(CustomScrollView),
+        const Offset(0, -1000),
+      );
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Continue'));
       await tester.tap(find.text('Continue'));
       await tester.pump();
@@ -50,6 +55,11 @@ void main() {
 
       await tester.enterText(find.widgetWithText(TextField, 'Pickup location'), 'Prayagraj Station');
       await tester.enterText(find.widgetWithText(TextField, 'Destination'), 'Civil Lines');
+      await tester.drag(
+        find.byType(CustomScrollView),
+        const Offset(0, -1000),
+      );
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Continue'));
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle(const Duration(milliseconds: 100));
