@@ -675,13 +675,11 @@ class _RideReviewPage extends StatelessWidget {
               booking.active = true;
               booking.lastRideId =
                   'GR-${DateTime.now().millisecondsSinceEpoch}';
-              Navigator.of(context).pop(true);
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      _RideRequestStatusPage(booking: booking),
-                ),
-              );
+              Navigator.of(context).pushReplacement(
+              MaterialPageRoute<void>(
+                builder: (_) => _RideRequestStatusPage(booking: booking),
+              ),
+            );
             },
             icon: const Icon(Icons.local_taxi_outlined),
             label: const Text('Preview request flow'),
@@ -861,7 +859,7 @@ class _RideRequestStatusPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  'This is a local demo state only. No driver was contacted. Real ride requests require the backend, driver app and dispatch service.',
+                  'No driver was contacted. Real ride requests require the backend, driver app and dispatch service.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Color(0xFF667085),
