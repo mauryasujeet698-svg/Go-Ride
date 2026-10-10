@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   customer:
-    name: Customer app analyze, tests and debug APK
+    name: Customer app analyze, tests and release APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -46,14 +46,19 @@ jobs:
         run: flutter create --platforms=android --org com.goride .
       - name: Configure Android location permissions
         run: python3 tool/configure_android_location_permissions.py
-      - name: Build arm64 Customer debug APK
-        run: flutter build apk --debug --target-platform android-arm64
-      - name: Report APK size
-        run: du -h build/app/outputs/flutter-apk/app-debug.apk
-      - name: Upload Customer debug APK
+      - name: Build arm64 Customer release APK
+        run: flutter build apk --release --target-platform android-arm64
+      - name: Report APK size and checksum
+        run: |
+          du -h build/app/outputs/flutter-apk/app-release.apk
+          sha256sum build/app/outputs/flutter-apk/app-release.apk > build/app/outputs/flutter-apk/app-release.apk.sha256
+          cat build/app/outputs/flutter-apk/app-release.apk.sha256
+      - name: Upload Customer release APK and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: go-ride-customer-debug-${{ github.sha }}
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: go-ride-customer-release-${{ github.sha }}
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha256
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14

@@ -27,7 +27,7 @@ void main() {
 
       await tester.tap(find.text('Profile'));
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('Profile'), findsOneWidget);
+      expect(find.text('Profile').first, findsOneWidget);
       expect(find.text('Guest rider'), findsOneWidget);
       expect(find.text('Help & support'), findsOneWidget);
     });
@@ -36,7 +36,7 @@ void main() {
       await tester.pumpWidget(const GoRideApp());
       await tester.pump();
 
-      await tester.ensureVisible(find.text('Continue'));
+      await _scrollHomeToBottom(tester);
       await tester.tap(find.text('Continue'));
       await tester.pump();
 
@@ -50,7 +50,7 @@ void main() {
 
       await tester.enterText(find.widgetWithText(TextField, 'Pickup location'), 'Prayagraj Station');
       await tester.enterText(find.widgetWithText(TextField, 'Destination'), 'Civil Lines');
-      await tester.ensureVisible(find.text('Continue'));
+      await _scrollHomeToBottom(tester);
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
@@ -63,4 +63,16 @@ void main() {
       expect(find.text('No driver was contacted. Real ride requests require the backend, driver app and dispatch service.'), findsOneWidget);
     });
   });
+}
+
+
+Future<void> _scrollHomeToBottom(WidgetTester tester) async {
+  await tester.pumpAndSettle();
+  final scrollableFinder = find.descendant(
+    of: find.byType(CustomScrollView).first,
+    matching: find.byType(Scrollable),
+  );
+  final scrollable = tester.state<ScrollableState>(scrollableFinder.first);
+  scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+  await tester.pumpAndSettle();
 }
