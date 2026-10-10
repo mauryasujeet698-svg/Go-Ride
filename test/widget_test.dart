@@ -36,12 +36,12 @@ void main() {
       await tester.pumpWidget(const GoRideApp());
       await tester.pump();
 
-      await tester.drag(
-        find.byType(CustomScrollView),
-        const Offset(0, -1000),
+      await tester.scrollUntilVisible(
+        find.text('Continue'),
+        400,
+        scrollable: find.byType(Scrollable).first,
+        maxScrolls: 10,
       );
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Continue'));
       await tester.tap(find.text('Continue'));
       await tester.pump();
 
@@ -55,12 +55,12 @@ void main() {
 
       await tester.enterText(find.widgetWithText(TextField, 'Pickup location'), 'Prayagraj Station');
       await tester.enterText(find.widgetWithText(TextField, 'Destination'), 'Civil Lines');
-      await tester.drag(
-        find.byType(CustomScrollView),
-        const Offset(0, -1000),
+      await tester.scrollUntilVisible(
+        find.text('Continue'),
+        400,
+        scrollable: find.byType(Scrollable).first,
+        maxScrolls: 10,
       );
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Continue'));
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
