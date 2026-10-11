@@ -1139,6 +1139,10 @@ class _ProfilePage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           const _ProfileTile(
+            icon: Icons.login_rounded,
+            title: 'Sign in / create account',
+          ),
+          const _ProfileTile(
             icon: Icons.location_on_outlined,
             title: 'Saved places',
           ),
@@ -1183,10 +1187,313 @@ class _ProfileTile extends StatelessWidget {
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => _ProfileDetailPage(title: title, icon: icon),
+              builder: (_) => title == 'Sign in / create account'
+                  ? const _AccountPage()
+                  : _ProfileDetailPage(title: title, icon: icon),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _AccountPage extends StatefulWidget {
+  const _AccountPage();
+
+  @override
+  State<_AccountPage> createState() => _AccountPageState();
+}
+
+class _AccountPageState extends State<_AccountPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _phoneController = TextEditingController();
+  final _nameController = TextEditingController();
+  bool _createAccount = false;
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _continue() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (!_formKey.currentState!.validate()) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Frontend preview only: no OTP was sent. Authentication will be connected during backend setup.',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(_createAccount ? 'Create account' : 'Sign in')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: const Color(0xFFE4EAF0)),
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.lock_outline_rounded, size: 36, color: GoRideApp._green),
+                    const SizedBox(height: 14),
+                    Text(
+                      _createAccount ? 'Create your Go-Ride account' : 'Welcome back',
+                      style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: GoRideApp._navy),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'This is the frontend preview. Account verification will be enabled when the backend is ready.',
+                      style: TextStyle(color: Color(0xFF667085), height: 1.45),
+                    ),
+                    const SizedBox(height: 20),
+                    if (_createAccount) ...[
+                      TextFormField(
+                        controller: _nameController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(labelText: 'Full name', prefixIcon: Icon(Icons.person_outline)),
+                        validator: (value) => _createAccount && (value == null || value.trim().isEmpty)
+                            ? 'Enter your name.'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    TextFormField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      maxLength: 10,
+                      decoration: const InputDecoration(
+                        labelText: '10-digit mobile number',
+                        prefixIcon: Icon(Icons.phone_android_rounded),
+                        counterText: '',
+                      ),
+                      validator: (value) {
+                        final phone = value?.trim() ?? '';
+                        return RegExp(r'^[6-9][0-9]{9}
+  const _NotificationsPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Notifications')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.notifications_none_rounded, size: 56, color: GoRideApp._navy),
+              const SizedBox(height: 16),
+              const Text('No notifications yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: GoRideApp._navy)),
+              const SizedBox(height: 8),
+              const Text(
+                'Ride updates and account alerts will appear here after notifications are connected. This preview does not send or receive live alerts.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF667085), height: 1.45),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileDetailPage extends StatelessWidget {
+  const _ProfileDetailPage({required this.title, required this.icon});
+
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSupport = title == 'Help & support';
+    final isSavedPlaces = title == 'Saved places';
+    final description = isSupport
+        ? 'Support requests will be connected after the backend is ready. For now, here is how the demo works.'
+        : isSavedPlaces
+            ? 'Saved addresses are not stored on this device yet. You can choose pickup and destination locations from the map when planning a ride.'
+            : 'Your profile is currently in guest preview mode. Secure sign-in, account recovery and session management will be connected during backend setup.';
+
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE4EAF0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 36, color: GoRideApp._green),
+                const SizedBox(height: 14),
+                Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: GoRideApp._navy)),
+                const SizedBox(height: 8),
+                Text(description, style: const TextStyle(color: Color(0xFF667085), height: 1.5)),
+              ],
+            ),
+          ),
+          if (isSupport) ...[
+            const SizedBox(height: 20),
+            const Text('Quick help', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: GoRideApp._navy)),
+            const SizedBox(height: 8),
+            const _HelpItem(title: 'How do I choose a pickup?', body: 'Open the map picker, search for a landmark or address, or tap the map to place a pin.'),
+            const _HelpItem(title: 'Is the shown fare final?', body: 'No. The displayed amount is an illustrative demo only. A real quote must be provided by the backend.'),
+            const _HelpItem(title: 'Will a driver receive my demo request?', body: 'No. Demo requests stay on this device and do not contact a driver.'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HelpItem extends StatelessWidget {
+  const _HelpItem({required this.title, required this.body});
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w800, color: GoRideApp._navy)),
+            const SizedBox(height: 6),
+            Text(body, style: const TextStyle(color: Color(0xFF667085), height: 1.4)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum RideType {
+  bike,
+  auto,
+  cab;
+
+  String get label {
+    switch (this) {
+      case RideType.bike:
+        return 'Go-Bike';
+      case RideType.auto:
+        return 'Go-Auto';
+      case RideType.cab:
+        return 'Go-Cab';
+    }
+  }
+
+  String get subtitle {
+    switch (this) {
+      case RideType.bike:
+        return 'Fast and economical';
+      case RideType.auto:
+        return 'Comfortable everyday ride';
+      case RideType.cab:
+        return 'More space, more comfort';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case RideType.bike:
+        return Icons.two_wheeler;
+      case RideType.auto:
+        return Icons.electric_rickshaw_outlined;
+      case RideType.cab:
+        return Icons.local_taxi_outlined;
+    }
+  }
+}
+
+class GoRideBookingDraft {
+  String pickup = '';
+  String destination = '';
+  RideType type = RideType.auto;
+  bool active = false;
+  String? lastRideId;
+  Coordinate? pickupCoordinate;
+  Coordinate? destinationCoordinate;
+  String? pickupPinnedLabel;
+  String? destinationPinnedLabel;
+
+  bool get isValid => pickup.isNotEmpty && destination.isNotEmpty;
+
+  int get estimatedFare {
+    switch (type) {
+      case RideType.bike:
+        return 69 + math.max(0, pickup.length + destination.length - 20);
+      case RideType.auto:
+        return 99 + math.max(0, pickup.length + destination.length - 15);
+      case RideType.cab:
+        return 149 + math.max(0, pickup.length + destination.length - 10);
+    }
+  }
+}
+).hasMatch(phone)
+                            ? null
+                            : 'Enter a valid 10-digit Indian mobile number.';
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    FilledButton(
+                      onPressed: _continue,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        backgroundColor: GoRideApp._green,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(_createAccount ? 'Continue to verification' : 'Continue'),
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton(
+                        onPressed: () => setState(() => _createAccount = !_createAccount),
+                        child: Text(
+                          _createAccount ? 'Already have an account? Sign in' : 'New to Go-Ride? Create account',
+                        ),
+                      ),
+                    ),
+                    if (!_createAccount)
+                      Center(
+                        child: TextButton(
+                          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Account recovery will be available after backend authentication is connected.')),
+                          ),
+                          child: const Text('Need help signing in?'),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
