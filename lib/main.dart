@@ -2,6 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_ride/core/types/coordinate.dart';
+import 'package:go_ride/infrastructure/api/go_ride_api_client.dart';
+import 'package:go_ride/infrastructure/maps/open_map_providers.dart';
+import 'package:go_ride/presentation/map/ride_map_picker_page.dart';
+import 'package:latlong2/latlong.dart';
 
 void main() {
   runApp(const GoRideApp());
@@ -158,25 +163,108 @@ class GoRideHomePage extends StatefulWidget {
 class _GoRideHomePageState extends State<GoRideHomePage> {
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
+  final OpenMapRoutingProvider _routing = OpenMapRoutingProvider();
+  Future<RoadRoute?>? _routeFuture;
 
   @override
   void initState() {
     super.initState();
     _pickupController.text = widget.booking.pickup;
     _destinationController.text = widget.booking.destination;
+    _refreshRoute();
   }
 
   @override
   void dispose() {
     _pickupController.dispose();
     _destinationController.dispose();
+    _routing.close();
     super.dispose();
   }
 
   void _syncBooking() {
-    widget.booking
-      ..pickup = _pickupController.text.trim()
-      ..destination = _destinationController.text.trim();
+    final pickup = _pickupController.text.trim();
+    final destination = _destinationController.text.trim();
+    final booking = widget.booking;
+
+    // If the rider edits a map-generated value, discard its old coordinates.
+    if (pickup != booking.pickupPinnedLabel) {
+      booking
+        ..pickupCoordinate = null
+        ..pickupPinnedLabel = null;
+    }
+    if (destination != booking.destinationPinnedLabel) {
+      booking
+        ..destinationCoordinate = null
+        ..destinationPinnedLabel = null;
+    }
+
+    booking
+      ..pickup = pickup
+      ..destination = destination;
+    _refreshRoute();
+  }
+
+  LatLng? _toLatLng(Coordinate? coordinate) {
+    if (coordinate == null) return null;
+    return LatLng(coordinate.latitude, coordinate.longitude);
+  }
+
+  String _pinLabel(LatLng point) =>
+      'Map pin · ${point.latitude.toStringAsFixed(5)}, '
+      '${point.longitude.toStringAsFixed(5)}';
+
+  void _refreshRoute() {
+    final pickup = _toLatLng(widget.booking.pickupCoordinate);
+    final destination = _toLatLng(widget.booking.destinationCoordinate);
+    _routeFuture = pickup == null || destination == null
+        ? null
+        : _routing.route(pickup, destination);
+  }
+
+  Future<void> _openMapPicker() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final booking = widget.booking;
+    final selection = await Navigator.of(context).push<RideMapSelection>(
+      MaterialPageRoute(
+        builder: (_) => RideMapPickerPage(
+          initialPickup: _toLatLng(booking.pickupCoordinate),
+          initialDestination: _toLatLng(booking.destinationCoordinate),
+        ),
+      ),
+    );
+    if (!mounted || selection == null) return;
+
+    setState(() {
+      final pickup = selection.pickup;
+      if (pickup != null) {
+        final label = _pinLabel(pickup);
+        booking
+          ..pickupCoordinate = Coordinate(
+            latitude: pickup.latitude,
+            longitude: pickup.longitude,
+          )
+          ..pickupPinnedLabel = selection.pickupLabel ?? label
+          ..pickup = selection.pickupLabel ?? label;
+        _pickupController.text = selection.pickupLabel ?? label;
+      }
+
+      final destination = selection.destination;
+      if (destination != null) {
+        final label = _pinLabel(destination);
+        booking
+          ..destinationCoordinate = Coordinate(
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+          )
+          ..destinationPinnedLabel = selection.destinationLabel ?? label
+          ..destination = selection.destinationLabel ?? label;
+        _destinationController.text = selection.destinationLabel ?? label;
+      }
+
+      _syncBooking();
+      _refreshRoute();
+    });
   }
 
   @override
@@ -216,12 +304,8 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
               IconButton(
                 tooltip: 'Notifications',
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Notifications will be connected to the backend.',
-                      ),
-                    ),
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const _NotificationsPage()),
                   );
                 },
                 icon: const Icon(Icons.notifications_none_rounded),
@@ -250,17 +334,55 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
                   ),
                 ),
                 const SizedBox(height: 22),
+                RideMapPreview(
+                  pickup: _toLatLng(booking.pickupCoordinate),
+                  destination: _toLatLng(booking.destinationCoordinate),
+                  routeFuture: _routeFuture,
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _openMapPicker,
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                  label: const Text('Choose pickup and destination on map'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: GoRideApp._navy,
+                    backgroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(50),
+                    side: const BorderSide(color: Color(0xFFE4EAF0)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
                 _LocationCard(
                   pickupController: _pickupController,
                   destinationController: _destinationController,
                   onChanged: () {
-                    setState(_syncBooking);
+                    setState(() {
+                      _syncBooking();
+                      _refreshRoute();
+                    });
                   },
                   onSwap: () {
                     final oldPickup = _pickupController.text;
+                    final booking = widget.booking;
+                    final oldPickupCoordinate = booking.pickupCoordinate;
+                    final oldPickupLabel = booking.pickupPinnedLabel;
+
                     _pickupController.text = _destinationController.text;
                     _destinationController.text = oldPickup;
-                    setState(_syncBooking);
+
+                    booking
+                      ..pickupCoordinate = booking.destinationCoordinate
+                      ..destinationCoordinate = oldPickupCoordinate
+                      ..pickupPinnedLabel = booking.destinationPinnedLabel
+                      ..destinationPinnedLabel = oldPickupLabel;
+
+                    setState(() {
+                      _syncBooking();
+                      _refreshRoute();
+                    });
                   },
                 ),
                 const SizedBox(height: 18),
@@ -312,6 +434,8 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
                 ),
                 const SizedBox(height: 18),
                 const _SecurityBanner(),
+                const SizedBox(height: 12),
+                const _BackendConnectionCard(),
               ]),
             ),
           ),
@@ -469,6 +593,112 @@ class _RideOptionCard extends StatelessWidget {
   }
 }
 
+class _BackendConnectionCard extends StatefulWidget {
+  const _BackendConnectionCard();
+
+  @override
+  State<_BackendConnectionCard> createState() => _BackendConnectionCardState();
+}
+
+class _BackendConnectionCardState extends State<_BackendConnectionCard> {
+  final GoRideApiClient _api = GoRideApiClient();
+  BackendReadiness? _readiness;
+  bool _checking = false;
+
+  @override
+  void dispose() {
+    _api.close();
+    super.dispose();
+  }
+
+  Future<void> _checkBackend() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    final result = await _api.checkReadiness();
+    if (!mounted) return;
+    setState(() {
+      _readiness = result;
+      _checking = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final readiness = _readiness;
+    final statusColor = readiness?.ready == true
+        ? GoRideApp._green
+        : const Color(0xFF667085);
+    final message = readiness?.message ??
+        (_api.isConfigured
+            ? 'Backend has not been checked yet.'
+            : 'Backend URL is not configured for this build.');
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFE4EAF0)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  readiness?.ready == true
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_off_outlined,
+                  color: statusColor,
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Backend connection',
+                    style: TextStyle(
+                      color: GoRideApp._navy,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _checking ? null : _checkBackend,
+                  child: _checking
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Check'),
+                ),
+              ],
+            ),
+            Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF667085),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'A healthy API does not by itself enable sign-in, driver dispatch or live bookings.',
+              style: TextStyle(
+                color: Color(0xFF667085),
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SecurityBanner extends StatelessWidget {
   const _SecurityBanner();
 
@@ -487,8 +717,8 @@ class _SecurityBanner extends StatelessWidget {
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Ride state is designed to be authoritative on the secure server. '
-              'Live matching and payment are connected in the backend phase.',
+              'Preview mode: live booking, server-calculated fares, driver matching '
+              'and payments are not connected yet.',
               style: TextStyle(
                 color: GoRideApp._navy,
                 fontSize: 13,
@@ -539,7 +769,7 @@ class _RideReviewPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Estimated fare',
+                  'Illustrative demo fare',
                   style: TextStyle(
                     color: Color(0xFF667085),
                     fontSize: 14,
@@ -556,7 +786,7 @@ class _RideReviewPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Final fare comes from the server after route and ride assignment are available.',
+                  'Development placeholder only. This figure is not calculated from a route and is not a real quote. Live fares must come from the backend.',
                   style: TextStyle(
                     color: Color(0xFF667085),
                     fontSize: 13,
@@ -571,17 +801,15 @@ class _RideReviewPage extends StatelessWidget {
             onPressed: () {
               booking.active = true;
               booking.lastRideId =
-                  'GR-${DateTime.now().millisecondsSinceEpoch}';
-              Navigator.of(context).pop(true);
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      _RideRequestStatusPage(booking: booking),
+                  'DEMO-${DateTime.now().millisecondsSinceEpoch}';
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute<void>(
+                  builder: (_) => _RideRequestStatusPage(booking: booking),
                 ),
               );
             },
             icon: const Icon(Icons.local_taxi_outlined),
-            label: const Text('Request ride'),
+            label: const Text('Preview request flow'),
             style: FilledButton.styleFrom(
               backgroundColor: GoRideApp._green,
               foregroundColor: Colors.white,
@@ -740,7 +968,7 @@ class _RideRequestStatusPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  'Ride request created',
+                  'Demo request created',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: GoRideApp._navy,
@@ -758,7 +986,7 @@ class _RideRequestStatusPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  'The customer flow is working. Live driver matching is intentionally not simulated; the next backend phase will connect this request to the authoritative ride service.',
+                  'No driver was contacted. Real ride requests require the backend, driver app and dispatch service.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Color(0xFF667085),
@@ -908,6 +1136,7 @@ class _ProfilePage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+          const _ProfileTile(icon: Icons.login_rounded, title: 'Sign in / create account'),
           const _ProfileTile(
             icon: Icons.location_on_outlined,
             title: 'Saved places',
@@ -951,13 +1180,147 @@ class _ProfileTile extends StatelessWidget {
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$title will be connected next.')),
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => title == 'Sign in / create account'
+                  ? const _AccountPage()
+                  : _ProfileDetailPage(title: title, icon: icon),
+            ),
           );
         },
       ),
     );
   }
+}
+
+class _AccountPage extends StatefulWidget {
+  const _AccountPage();
+  @override
+  State<_AccountPage> createState() => _AccountPageState();
+}
+
+class _AccountPageState extends State<_AccountPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _phoneController = TextEditingController();
+  final _nameController = TextEditingController();
+  bool _createAccount = false;
+  @override
+  void dispose() { _phoneController.dispose(); _nameController.dispose(); super.dispose(); }
+  void _continue() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (!_formKey.currentState!.validate()) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Frontend preview only: no OTP was sent. Authentication will be connected during backend setup.')));
+  }
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(_createAccount ? 'Create account' : 'Sign in')),
+    body: SafeArea(child: ListView(padding: const EdgeInsets.all(20), children: [
+      Container(padding: const EdgeInsets.all(22), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: const Color(0xFFE4EAF0))),
+        child: Form(key: _formKey, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.lock_outline_rounded, size: 36, color: GoRideApp._green),
+          const SizedBox(height: 14),
+          Text(_createAccount ? 'Create your Go-Ride account' : 'Welcome back', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: GoRideApp._navy)),
+          const SizedBox(height: 8),
+          const Text('This is the frontend preview. Account verification will be enabled when the backend is ready.', style: TextStyle(color: Color(0xFF667085), height: 1.45)),
+          const SizedBox(height: 20),
+          if (_createAccount) ...[
+            TextFormField(controller: _nameController, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Full name', prefixIcon: Icon(Icons.person_outline)), validator: (value) => value == null || value.trim().isEmpty ? 'Enter your name.' : null),
+            const SizedBox(height: 12),
+          ],
+          TextFormField(controller: _phoneController, keyboardType: TextInputType.phone, maxLength: 10, decoration: const InputDecoration(labelText: '10-digit mobile number', prefixIcon: Icon(Icons.phone_android_rounded), counterText: ''),
+            validator: (value) {
+              final phone = value?.trim() ?? '';
+              final hasValidLength = phone.length == 10;
+              final hasValidPrefix = phone.isNotEmpty && '6789'.contains(phone[0]);
+              final containsOnlyDigits = phone.codeUnits.every((code) => code >= 48 && code <= 57);
+              return hasValidLength && hasValidPrefix && containsOnlyDigits ? null : 'Enter a valid 10-digit Indian mobile number.';
+            },
+          ),
+          const SizedBox(height: 18),
+          FilledButton(onPressed: _continue, style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52), backgroundColor: GoRideApp._green, foregroundColor: Colors.white), child: Text(_createAccount ? 'Continue to verification' : 'Continue')),
+          const SizedBox(height: 8),
+          Center(child: TextButton(onPressed: () => setState(() => _createAccount = !_createAccount), child: Text(_createAccount ? 'Already have an account? Sign in' : 'New to Go-Ride? Create account'))),
+          if (!_createAccount) Center(child: TextButton(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account recovery will be available after backend authentication is connected.'))), child: const Text('Need help signing in?'))),
+        ])),
+      ),
+    ])),
+  );
+}
+
+class _NotificationsPage extends StatelessWidget {
+  const _NotificationsPage();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Notifications')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.notifications_none_rounded, size: 56, color: GoRideApp._navy),
+                SizedBox(height: 16),
+                Text(
+                  'No notifications yet',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: GoRideApp._navy),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Ride updates and account alerts will appear here after notifications are connected. This preview does not send or receive live alerts.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF667085), height: 1.45),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class _ProfileDetailPage extends StatelessWidget {
+  const _ProfileDetailPage({required this.title, required this.icon});
+  final String title;
+  final IconData icon;
+  @override
+  Widget build(BuildContext context) {
+    final isSupport = title == 'Help & support';
+    final isSavedPlaces = title == 'Saved places';
+    final description = isSupport
+        ? 'Support requests will be connected after the backend is ready. For now, here is how the demo works.'
+        : isSavedPlaces
+            ? 'Saved addresses are not stored on this device yet. You can choose pickup and destination locations from the map when planning a ride.'
+            : 'Your profile is currently in guest preview mode. Secure sign-in, account recovery and session management will be connected during backend setup.';
+    return Scaffold(appBar: AppBar(title: Text(title)), body: ListView(padding: const EdgeInsets.all(20), children: [
+      Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE4EAF0))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 36, color: GoRideApp._green),
+        const SizedBox(height: 14),
+        Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: GoRideApp._navy)),
+        const SizedBox(height: 8),
+        Text(description, style: const TextStyle(color: Color(0xFF667085), height: 1.5)),
+      ])),
+      if (isSupport) ...[
+        const SizedBox(height: 20),
+        const Text('Quick help', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: GoRideApp._navy)),
+        const SizedBox(height: 8),
+        const _HelpItem(title: 'How do I choose a pickup?', body: 'Open the map picker, search for a landmark or address, or tap the map to place a pin.'),
+        const _HelpItem(title: 'Is the shown fare final?', body: 'No. The displayed amount is an illustrative demo only. A real quote must be provided by the backend.'),
+        const _HelpItem(title: 'Will a driver receive my demo request?', body: 'No. Demo requests stay on this device and do not contact a driver.'),
+      ],
+    ]));
+  }
+}
+
+class _HelpItem extends StatelessWidget {
+  const _HelpItem({required this.title, required this.body});
+  final String title;
+  final String body;
+  @override
+  Widget build(BuildContext context) => Card(elevation: 0, color: Colors.white, child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text(title, style: const TextStyle(fontWeight: FontWeight.w800, color: GoRideApp._navy)),
+    const SizedBox(height: 6),
+    Text(body, style: const TextStyle(color: Color(0xFF667085), height: 1.4)),
+  ])));
 }
 
 enum RideType {
@@ -1005,6 +1368,10 @@ class GoRideBookingDraft {
   RideType type = RideType.auto;
   bool active = false;
   String? lastRideId;
+  Coordinate? pickupCoordinate;
+  Coordinate? destinationCoordinate;
+  String? pickupPinnedLabel;
+  String? destinationPinnedLabel;
 
   bool get isValid => pickup.isNotEmpty && destination.isNotEmpty;
 

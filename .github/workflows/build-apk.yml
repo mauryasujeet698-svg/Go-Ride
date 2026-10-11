@@ -38,8 +38,11 @@ jobs:
       - name: Generate Android platform
         run: flutter create --platforms=android --org com.goride .
 
+      - name: Configure Android location permissions
+        run: python3 tool/configure_android_location_permissions.py
+
       - name: Build release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --target-platform android-arm64
 
       - name: Create build provenance metadata
         shell: bash
