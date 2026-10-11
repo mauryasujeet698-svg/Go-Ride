@@ -304,11 +304,9 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
               IconButton(
                 tooltip: 'Notifications',
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Notifications will be connected to the backend.',
-                      ),
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const _NotificationsPage(),
                     ),
                   );
                 },
@@ -1183,10 +1181,120 @@ class _ProfileTile extends StatelessWidget {
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$title will be connected next.')),
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => _ProfileDetailPage(title: title, icon: icon),
+            ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _NotificationsPage extends StatelessWidget {
+  const _NotificationsPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Notifications')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.notifications_none_rounded, size: 56, color: GoRideApp._navy),
+              const SizedBox(height: 16),
+              const Text('No notifications yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: GoRideApp._navy)),
+              const SizedBox(height: 8),
+              const Text(
+                'Ride updates and account alerts will appear here after notifications are connected. This preview does not send or receive live alerts.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF667085), height: 1.45),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileDetailPage extends StatelessWidget {
+  const _ProfileDetailPage({required this.title, required this.icon});
+
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSupport = title == 'Help & support';
+    final isSavedPlaces = title == 'Saved places';
+    final description = isSupport
+        ? 'Support requests will be connected after the backend is ready. For now, here is how the demo works.'
+        : isSavedPlaces
+            ? 'Saved addresses are not stored on this device yet. You can choose pickup and destination locations from the map when planning a ride.'
+            : 'Your profile is currently in guest preview mode. Secure sign-in, account recovery and session management will be connected during backend setup.';
+
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE4EAF0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 36, color: GoRideApp._green),
+                const SizedBox(height: 14),
+                Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: GoRideApp._navy)),
+                const SizedBox(height: 8),
+                Text(description, style: const TextStyle(color: Color(0xFF667085), height: 1.5)),
+              ],
+            ),
+          ),
+          if (isSupport) ...[
+            const SizedBox(height: 20),
+            const Text('Quick help', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: GoRideApp._navy)),
+            const SizedBox(height: 8),
+            const _HelpItem(title: 'How do I choose a pickup?', body: 'Open the map picker, search for a landmark or address, or tap the map to place a pin.'),
+            const _HelpItem(title: 'Is the shown fare final?', body: 'No. The displayed amount is an illustrative demo only. A real quote must be provided by the backend.'),
+            const _HelpItem(title: 'Will a driver receive my demo request?', body: 'No. Demo requests stay on this device and do not contact a driver.'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HelpItem extends StatelessWidget {
+  const _HelpItem({required this.title, required this.body});
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w800, color: GoRideApp._navy)),
+            const SizedBox(height: 6),
+            Text(body, style: const TextStyle(color: Color(0xFF667085), height: 1.4)),
+          ],
+        ),
       ),
     );
   }
