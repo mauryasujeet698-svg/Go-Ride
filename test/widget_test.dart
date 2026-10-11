@@ -45,6 +45,17 @@ void main() {
 
       await tester.pageBack();
       await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      await tester.tap(find.text('Sign in / create account'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(find.text('Welcome back'), findsOneWidget);
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      expect(find.text('Enter a valid 10-digit Indian mobile number.'), findsOneWidget);
+      await tester.tap(find.text('New to Go-Ride? Create account'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(find.text('Full name'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
       await tester.tap(find.text('Home'));
       await tester.pump(const Duration(milliseconds: 100));
       await tester.tap(find.byTooltip('Notifications'));
