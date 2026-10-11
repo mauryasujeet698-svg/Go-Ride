@@ -32,91 +32,116 @@ class RideMapPreview extends StatelessWidget {
   const RideMapPreview({
     this.pickup,
     this.destination,
+    this.routeFuture,
     super.key,
   });
 
   final LatLng? pickup;
   final LatLng? destination;
+  final Future<RoadRoute?>? routeFuture;
 
   @override
   Widget build(BuildContext context) {
     final center = pickup ?? destination ?? _defaultCenter;
     final hasPins = pickup != null || destination != null;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: SizedBox(
-        height: 224,
-        child: Stack(
-          children: [
-            FlutterMap(
-              options: MapOptions(
-                initialCenter: center,
-                initialZoom: hasPins ? 13 : 6.5,
-              ),
+    return FutureBuilder<RoadRoute?>(
+      future: routeFuture,
+      builder: (context, snapshot) {
+        final route = snapshot.data;
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: SizedBox(
+            height: 224,
+            child: Stack(
               children: [
-                TileLayer(
-                  urlTemplate: _tileUrl,
-                  userAgentPackageName: 'com.goride.go_ride',
-                ),
-                MarkerLayer(
-                  markers: _buildMarkers(
-                    pickup: pickup,
-                    destination: destination,
+                FlutterMap(
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: hasPins ? 13 : 6.5,
                   ),
-                ),
-                const RichAttributionWidget(
-                  attributions: [
-                    TextSourceAttribution('© OpenStreetMap contributors'),
-                  ],
-                ),
-              ],
-            ),
-            Positioned(
-              top: 12,
-              left: 12,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.96),
-                  borderRadius: BorderRadius.circular(999),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x18000000),
-                      blurRadius: 12,
-                      offset: Offset(0, 3),
+                  children: [
+                    TileLayer(
+                      urlTemplate: _tileUrl,
+                      userAgentPackageName: 'com.goride.go_ride',
+                    ),
+                    if (route != null)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: route.points,
+                            color: const Color(0xFF00B84F),
+                            strokeWidth: 4,
+                          ),
+                        ],
+                      ),
+                    MarkerLayer(
+                      markers: _buildMarkers(
+                        pickup: pickup,
+                        destination: destination,
+                      ),
+                    ),
+                    const RichAttributionWidget(
+                      attributions: [
+                        TextSourceAttribution('© OpenStreetMap contributors'),
+                      ],
                     ),
                   ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.map_outlined,
-                        size: 16,
-                        color: Color(0xFF102235),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        hasPins ? 'Selected map pins' : 'Explore the map',
-                        style: const TextStyle(
-                          color: Color(0xFF102235),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.96),
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x18000000),
+                          blurRadius: 12,
+                          offset: Offset(0, 3),
                         ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.map_outlined, size: 16, color: Color(0xFF102235)),
+                          const SizedBox(width: 6),
+                          Text(
+                            route != null
+                                ? '${route.distanceLabel} · ${route.durationLabel}'
+                                : snapshot.connectionState == ConnectionState.waiting
+                                    ? 'Calculating road route…'
+                                    : hasPins ? 'Selected map pins' : 'Explore the map',
+                            style: const TextStyle(
+                              color: Color(0xFF102235),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+                if (routeFuture != null && snapshot.hasError)
+                  const Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12,
+                    child: Text(
+                      'Route service unavailable. Pin selection still works.',
+                      style: TextStyle(color: Color(0xFF102235), fontSize: 11),
+                    ),
+                  ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
