@@ -1249,17 +1249,33 @@ class _AccountPageState extends State<_AccountPage> {
 
 class _NotificationsPage extends StatelessWidget {
   const _NotificationsPage();
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Notifications')),
-    body: Center(child: Padding(padding: const EdgeInsets.all(28), child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.notifications_none_rounded, size: 56, color: GoRideApp._navy),
-      const SizedBox(height: 16),
-      const Text('No notifications yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: GoRideApp._navy)),
-      const SizedBox(height: 8),
-      const Text('Ride updates and account alerts will appear here after notifications are connected. This preview does not send or receive live alerts.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF667085), height: 1.45)),
-    ]))),
-  );
+        appBar: AppBar(title: const Text('Notifications')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.notifications_none_rounded, size: 56, color: GoRideApp._navy),
+                SizedBox(height: 16),
+                Text(
+                  'No notifications yet',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: GoRideApp._navy),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Ride updates and account alerts will appear here after notifications are connected. This preview does not send or receive live alerts.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF667085), height: 1.45),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _ProfileDetailPage extends StatelessWidget {
