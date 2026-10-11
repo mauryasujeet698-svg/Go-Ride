@@ -42,25 +42,27 @@ class RideMapPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasPins = pickup != null || destination != null;
-    final center = pickup != null && destination != null
+    final selectedPickup = pickup;
+    final selectedDestination = destination;
+    final hasPins = selectedPickup != null || selectedDestination != null;
+    final center = selectedPickup != null && selectedDestination != null
         ? LatLng(
-            (pickup.latitude + destination.latitude) / 2,
-            (pickup.longitude + destination.longitude) / 2,
+            (selectedPickup.latitude + selectedDestination.latitude) / 2.0,
+            (selectedPickup.longitude + selectedDestination.longitude) / 2.0,
           )
-        : pickup ?? destination ?? _defaultCenter;
-    final straightLineKm = pickup != null && destination != null
-        ? const Distance().as(LengthUnit.Kilometer, pickup, destination)
+        : selectedPickup ?? selectedDestination ?? _defaultCenter;
+    final straightLineKm = selectedPickup != null && selectedDestination != null
+        ? const Distance().as(LengthUnit.Kilometer, selectedPickup, selectedDestination)
         : 0.0;
     final previewZoom = straightLineKm > 100
         ? 6.5
         : straightLineKm > 30
-            ? 8
+            ? 8.0
             : straightLineKm > 10
                 ? 9.5
                 : straightLineKm > 3
-                    ? 11
-                    : hasPins ? 13 : 6.5;
+                    ? 11.0
+                    : hasPins ? 13.0 : 6.5;
 
     return FutureBuilder<RoadRoute?>(
       future: routeFuture,
