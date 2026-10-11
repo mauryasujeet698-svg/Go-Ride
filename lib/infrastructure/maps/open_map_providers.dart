@@ -157,7 +157,7 @@ class RoadRoute {
   final double durationSeconds;
 
   String get distanceLabel => distanceMeters >= 1000
-      ? '${(distanceMeters / 1000).toStringAsFixed(1)} km'
+      ? '${((distanceMeters / 100).round() / 10).toStringAsFixed(1)} km'
       : '${distanceMeters.round()} m';
 
   String get durationLabel {
