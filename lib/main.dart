@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_ride/core/types/coordinate.dart';
 import 'package:go_ride/infrastructure/api/go_ride_api_client.dart';
+import 'package:go_ride/infrastructure/maps/open_map_providers.dart';
 import 'package:go_ride/presentation/map/ride_map_picker_page.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -162,18 +163,22 @@ class GoRideHomePage extends StatefulWidget {
 class _GoRideHomePageState extends State<GoRideHomePage> {
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
+  final OpenMapRoutingProvider _routing = OpenMapRoutingProvider();
+  Future<RoadRoute?>? _routeFuture;
 
   @override
   void initState() {
     super.initState();
     _pickupController.text = widget.booking.pickup;
     _destinationController.text = widget.booking.destination;
+    _refreshRoute();
   }
 
   @override
   void dispose() {
     _pickupController.dispose();
     _destinationController.dispose();
+    _routing.close();
     super.dispose();
   }
 
@@ -197,6 +202,7 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
     booking
       ..pickup = pickup
       ..destination = destination;
+    _refreshRoute();
   }
 
   LatLng? _toLatLng(Coordinate? coordinate) {
@@ -207,6 +213,14 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
   String _pinLabel(LatLng point) =>
       'Map pin · ${point.latitude.toStringAsFixed(5)}, '
       '${point.longitude.toStringAsFixed(5)}';
+
+  void _refreshRoute() {
+    final pickup = _toLatLng(widget.booking.pickupCoordinate);
+    final destination = _toLatLng(widget.booking.destinationCoordinate);
+    _routeFuture = pickup == null || destination == null
+        ? null
+        : _routing.route(pickup, destination);
+  }
 
   Future<void> _openMapPicker() async {
     FocusManager.instance.primaryFocus?.unfocus();
@@ -230,9 +244,9 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
             latitude: pickup.latitude,
             longitude: pickup.longitude,
           )
-          ..pickupPinnedLabel = label
-          ..pickup = label;
-        _pickupController.text = label;
+          ..pickupPinnedLabel = selection.pickupLabel ?? label
+          ..pickup = selection.pickupLabel ?? label;
+        _pickupController.text = selection.pickupLabel ?? label;
       }
 
       final destination = selection.destination;
@@ -243,12 +257,13 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
             latitude: destination.latitude,
             longitude: destination.longitude,
           )
-          ..destinationPinnedLabel = label
-          ..destination = label;
-        _destinationController.text = label;
+          ..destinationPinnedLabel = selection.destinationLabel ?? label
+          ..destination = selection.destinationLabel ?? label;
+        _destinationController.text = selection.destinationLabel ?? label;
       }
 
       _syncBooking();
+      _refreshRoute();
     });
   }
 
@@ -326,6 +341,7 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
                 RideMapPreview(
                   pickup: _toLatLng(booking.pickupCoordinate),
                   destination: _toLatLng(booking.destinationCoordinate),
+                  routeFuture: _routeFuture,
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -347,7 +363,10 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
                   pickupController: _pickupController,
                   destinationController: _destinationController,
                   onChanged: () {
-                    setState(_syncBooking);
+                    setState(() {
+                      _syncBooking();
+                      _refreshRoute();
+                    });
                   },
                   onSwap: () {
                     final oldPickup = _pickupController.text;
@@ -364,7 +383,10 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
                       ..pickupPinnedLabel = booking.destinationPinnedLabel
                       ..destinationPinnedLabel = oldPickupLabel;
 
-                    setState(_syncBooking);
+                    setState(() {
+                      _syncBooking();
+                      _refreshRoute();
+                    });
                   },
                 ),
                 const SizedBox(height: 18),
