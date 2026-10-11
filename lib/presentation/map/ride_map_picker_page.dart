@@ -42,8 +42,25 @@ class RideMapPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final center = pickup ?? destination ?? _defaultCenter;
     final hasPins = pickup != null || destination != null;
+    final center = pickup != null && destination != null
+        ? LatLng(
+            (pickup.latitude + destination.latitude) / 2,
+            (pickup.longitude + destination.longitude) / 2,
+          )
+        : pickup ?? destination ?? _defaultCenter;
+    final straightLineKm = pickup != null && destination != null
+        ? const Distance().as(LengthUnit.Kilometer, pickup, destination)
+        : 0.0;
+    final previewZoom = straightLineKm > 100
+        ? 6.5
+        : straightLineKm > 30
+            ? 8
+            : straightLineKm > 10
+                ? 9.5
+                : straightLineKm > 3
+                    ? 11
+                    : hasPins ? 13 : 6.5;
 
     return FutureBuilder<RoadRoute?>(
       future: routeFuture,
@@ -58,7 +75,7 @@ class RideMapPreview extends StatelessWidget {
                 FlutterMap(
                   options: MapOptions(
                     initialCenter: center,
-                    initialZoom: hasPins ? 13 : 6.5,
+                    initialZoom: previewZoom,
                   ),
                   children: [
                     TileLayer(
