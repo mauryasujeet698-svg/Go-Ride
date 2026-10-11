@@ -1228,70 +1228,14 @@ class _AccountPageState extends State<_AccountPage> {
             const SizedBox(height: 12),
           ],
           TextFormField(controller: _phoneController, keyboardType: TextInputType.phone, maxLength: 10, decoration: const InputDecoration(labelText: '10-digit mobile number', prefixIcon: Icon(Icons.phone_android_rounded), counterText: ''),
-            validator: (value) { final phone = value?.trim() ?? ''; return RegExp(r'^[6-9][0-9]{9}
-  bike,
-  auto,
-  cab;
-
-  String get label {
-    switch (this) {
-      case RideType.bike:
-        return 'Go-Bike';
-      case RideType.auto:
-        return 'Go-Auto';
-      case RideType.cab:
-        return 'Go-Cab';
-    }
-  }
-
-  String get subtitle {
-    switch (this) {
-      case RideType.bike:
-        return 'Fast and economical';
-      case RideType.auto:
-        return 'Comfortable everyday ride';
-      case RideType.cab:
-        return 'More space, more comfort';
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case RideType.bike:
-        return Icons.two_wheeler;
-      case RideType.auto:
-        return Icons.electric_rickshaw_outlined;
-      case RideType.cab:
-        return Icons.local_taxi_outlined;
-    }
-  }
-}
-
-class GoRideBookingDraft {
-  String pickup = '';
-  String destination = '';
-  RideType type = RideType.auto;
-  bool active = false;
-  String? lastRideId;
-  Coordinate? pickupCoordinate;
-  Coordinate? destinationCoordinate;
-  String? pickupPinnedLabel;
-  String? destinationPinnedLabel;
-
-  bool get isValid => pickup.isNotEmpty && destination.isNotEmpty;
-
-  int get estimatedFare {
-    switch (type) {
-      case RideType.bike:
-        return 69 + math.max(0, pickup.length + destination.length - 20);
-      case RideType.auto:
-        return 99 + math.max(0, pickup.length + destination.length - 15);
-      case RideType.cab:
-        return 149 + math.max(0, pickup.length + destination.length - 10);
-    }
-  }
-}
-).hasMatch(phone) ? null : 'Enter a valid 10-digit Indian mobile number.'; }),
+            validator: (value) {
+              final phone = value?.trim() ?? '';
+              final hasValidLength = phone.length == 10;
+              final hasValidPrefix = phone.isNotEmpty && '6789'.contains(phone[0]);
+              final containsOnlyDigits = phone.codeUnits.every((code) => code >= 48 && code <= 57);
+              return hasValidLength && hasValidPrefix && containsOnlyDigits ? null : 'Enter a valid 10-digit Indian mobile number.';
+            },
+          ),
           const SizedBox(height: 18),
           FilledButton(onPressed: _continue, style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52), backgroundColor: GoRideApp._green, foregroundColor: Colors.white), child: Text(_createAccount ? 'Continue to verification' : 'Continue')),
           const SizedBox(height: 8),
