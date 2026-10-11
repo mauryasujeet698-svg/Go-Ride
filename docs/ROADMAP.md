@@ -17,19 +17,19 @@ Acceptance: main is the authoritative integration branch; every proposed change 
 
 - [ ] Polish home, pickup/destination entry, vehicle selection and booking review.
 - [ ] Implement explicit loading, empty, error, offline and permission-denied states.
-- [ ] Make trips/profile/support screens honest and useful; remove dead or misleading controls.
+- [x] Make trips/profile/support screens honest and useful; remove dead or misleading controls (frontend previews only).
 - [ ] Verify theme contrast, accessibility, Hindi/English foundations and small-screen layouts.
 
 Acceptance: all visible controls have defined behaviour and UI tests cover the primary customer navigation.
 
 ## Phase 2 — Maps, places and navigation
 
-- [ ] Select a Flutter map renderer and OpenStreetMap-based data strategy.
-- [ ] Implement permission-aware GPS/current location and manual map pin selection.
-- [ ] Implement real place search/reverse geocoding through a replaceable provider.
-- [ ] Implement road routing, polyline, route distance and ETA.
+- [x] Select a Flutter map renderer (`flutter_map`) and OpenStreetMap-based data strategy for development.
+- [x] Implement permission-aware GPS/current location and manual map pin selection.
+- [x] Implement place search/reverse geocoding through a replaceable provider (public low-volume development endpoint; production provider still needs selection).
+- [x] Implement road routing, polyline, route distance and ETA preview (public demo endpoint; production provider still needs selection).
 - [ ] Evaluate turn-by-turn text/voice guidance, off-route detection and rerouting.
-- [ ] Document tile/geocoding/routing service policies, attribution and scaling limits.
+- [x] Document tile/geocoding/routing service policies, attribution and scaling limits.
 
 Acceptance: no fabricated routes or distances; tested journeys cover the intended launch region; map zoom/pan and location failure paths work.
 
