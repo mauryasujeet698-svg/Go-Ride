@@ -8,7 +8,7 @@ Go-Ride is an original Flutter/Dart ride-hailing customer app being developed to
 
 Implemented foundations include ride-domain models, state-machine/reconciliation contracts, application use cases, a RideBloc, provider interfaces, unit tests, and GitHub Actions quality/build workflows.
 
-The current customer UI still contains prototype-only behaviour. Fare estimates are not route-based, booking state is not persisted by a live backend, and the app does not yet integrate a real map/GPS/routing provider or driver matching service. A successful APK build is not proof of a complete ride journey.
+The customer frontend now includes an interactive OpenStreetMap picker, foreground GPS selection, place search/reverse geocoding, and route/distance/ETA previews when public development providers respond. Fares and booking requests remain demo-only; trip state is not persisted, driver matching is not connected, and public map/geocoding/routing endpoints are not production infrastructure. See `docs/CUSTOMER_FRONTEND_STATUS.md`. A successful APK build is not proof of a complete ride journey.
 
 ## Architecture principles
 
