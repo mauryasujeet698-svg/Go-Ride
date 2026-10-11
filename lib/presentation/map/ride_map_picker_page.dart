@@ -130,8 +130,10 @@ class RideMapPreview extends StatelessWidget {
                           Text(
                             route != null
                                 ? '${route.distanceLabel} · ${route.durationLabel}'
-                                : snapshot.connectionState == ConnectionState.waiting
-                                    ? 'Calculating road route…'
+                                : routeFuture != null
+                                    ? snapshot.connectionState == ConnectionState.waiting
+                                        ? 'Calculating road route…'
+                                        : 'Route unavailable'
                                     : hasPins ? 'Selected map pins' : 'Explore the map',
                             style: const TextStyle(
                               color: Color(0xFF102235),
