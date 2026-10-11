@@ -2,6 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_ride/core/types/coordinate.dart';
+import 'package:go_ride/infrastructure/api/go_ride_api_client.dart';
+import 'package:go_ride/infrastructure/maps/open_map_providers.dart';
+import 'package:go_ride/presentation/map/ride_map_picker_page.dart';
+import 'package:latlong2/latlong.dart';
 
 void main() {
   runApp(const GoRideApp());
@@ -158,25 +163,108 @@ class GoRideHomePage extends StatefulWidget {
 class _GoRideHomePageState extends State<GoRideHomePage> {
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
+  final OpenMapRoutingProvider _routing = OpenMapRoutingProvider();
+  Future<RoadRoute?>? _routeFuture;
 
   @override
   void initState() {
     super.initState();
     _pickupController.text = widget.booking.pickup;
     _destinationController.text = widget.booking.destination;
+    _refreshRoute();
   }
 
   @override
   void dispose() {
     _pickupController.dispose();
     _destinationController.dispose();
+    _routing.close();
     super.dispose();
   }
 
   void _syncBooking() {
-    widget.booking
-      ..pickup = _pickupController.text.trim()
-      ..destination = _destinationController.text.trim();
+    final pickup = _pickupController.text.trim();
+    final destination = _destinationController.text.trim();
+    final booking = widget.booking;
+
+    // If the rider edits a map-generated value, discard its old coordinates.
+    if (pickup != booking.pickupPinnedLabel) {
+      booking
+        ..pickupCoordinate = null
+        ..pickupPinnedLabel = null;
+    }
+    if (destination != booking.destinationPinnedLabel) {
+      booking
+        ..destinationCoordinate = null
+        ..destinationPinnedLabel = null;
+    }
+
+    booking
+      ..pickup = pickup
+      ..destination = destination;
+    _refreshRoute();
+  }
+
+  LatLng? _toLatLng(Coordinate? coordinate) {
+    if (coordinate == null) return null;
+    return LatLng(coordinate.latitude, coordinate.longitude);
+  }
+
+  String _pinLabel(LatLng point) =>
+      'Map pin · ${point.latitude.toStringAsFixed(5)}, '
+      '${point.longitude.toStringAsFixed(5)}';
+
+  void _refreshRoute() {
+    final pickup = _toLatLng(widget.booking.pickupCoordinate);
+    final destination = _toLatLng(widget.booking.destinationCoordinate);
+    _routeFuture = pickup == null || destination == null
+        ? null
+        : _routing.route(pickup, destination);
+  }
+
+  Future<void> _openMapPicker() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final booking = widget.booking;
+    final selection = await Navigator.of(context).push<RideMapSelection>(
+      MaterialPageRoute(
+        builder: (_) => RideMapPickerPage(
+          initialPickup: _toLatLng(booking.pickupCoordinate),
+          initialDestination: _toLatLng(booking.destinationCoordinate),
+        ),
+      ),
+    );
+    if (!mounted || selection == null) return;
+
+    setState(() {
+      final pickup = selection.pickup;
+      if (pickup != null) {
+        final label = _pinLabel(pickup);
+        booking
+          ..pickupCoordinate = Coordinate(
+            latitude: pickup.latitude,
+            longitude: pickup.longitude,
+          )
+          ..pickupPinnedLabel = selection.pickupLabel ?? label
+          ..pickup = selection.pickupLabel ?? label;
+        _pickupController.text = selection.pickupLabel ?? label;
+      }
+
+      final destination = selection.destination;
+      if (destination != null) {
+        final label = _pinLabel(destination);
+        booking
+          ..destinationCoordinate = Coordinate(
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+          )
+          ..destinationPinnedLabel = selection.destinationLabel ?? label
+          ..destination = selection.destinationLabel ?? label;
+        _destinationController.text = selection.destinationLabel ?? label;
+      }
+
+      _syncBooking();
+      _refreshRoute();
+    });
   }
 
   @override
@@ -250,17 +338,55 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
                   ),
                 ),
                 const SizedBox(height: 22),
+                RideMapPreview(
+                  pickup: _toLatLng(booking.pickupCoordinate),
+                  destination: _toLatLng(booking.destinationCoordinate),
+                  routeFuture: _routeFuture,
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _openMapPicker,
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                  label: const Text('Choose pickup and destination on map'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: GoRideApp._navy,
+                    backgroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(50),
+                    side: const BorderSide(color: Color(0xFFE4EAF0)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
                 _LocationCard(
                   pickupController: _pickupController,
                   destinationController: _destinationController,
                   onChanged: () {
-                    setState(_syncBooking);
+                    setState(() {
+                      _syncBooking();
+                      _refreshRoute();
+                    });
                   },
                   onSwap: () {
                     final oldPickup = _pickupController.text;
+                    final booking = widget.booking;
+                    final oldPickupCoordinate = booking.pickupCoordinate;
+                    final oldPickupLabel = booking.pickupPinnedLabel;
+
                     _pickupController.text = _destinationController.text;
                     _destinationController.text = oldPickup;
-                    setState(_syncBooking);
+
+                    booking
+                      ..pickupCoordinate = booking.destinationCoordinate
+                      ..destinationCoordinate = oldPickupCoordinate
+                      ..pickupPinnedLabel = booking.destinationPinnedLabel
+                      ..destinationPinnedLabel = oldPickupLabel;
+
+                    setState(() {
+                      _syncBooking();
+                      _refreshRoute();
+                    });
                   },
                 ),
                 const SizedBox(height: 18),
@@ -312,6 +438,8 @@ class _GoRideHomePageState extends State<GoRideHomePage> {
                 ),
                 const SizedBox(height: 18),
                 const _SecurityBanner(),
+                const SizedBox(height: 12),
+                const _BackendConnectionCard(),
               ]),
             ),
           ),
@@ -469,6 +597,112 @@ class _RideOptionCard extends StatelessWidget {
   }
 }
 
+class _BackendConnectionCard extends StatefulWidget {
+  const _BackendConnectionCard();
+
+  @override
+  State<_BackendConnectionCard> createState() => _BackendConnectionCardState();
+}
+
+class _BackendConnectionCardState extends State<_BackendConnectionCard> {
+  final GoRideApiClient _api = GoRideApiClient();
+  BackendReadiness? _readiness;
+  bool _checking = false;
+
+  @override
+  void dispose() {
+    _api.close();
+    super.dispose();
+  }
+
+  Future<void> _checkBackend() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    final result = await _api.checkReadiness();
+    if (!mounted) return;
+    setState(() {
+      _readiness = result;
+      _checking = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final readiness = _readiness;
+    final statusColor = readiness?.ready == true
+        ? GoRideApp._green
+        : const Color(0xFF667085);
+    final message = readiness?.message ??
+        (_api.isConfigured
+            ? 'Backend has not been checked yet.'
+            : 'Backend URL is not configured for this build.');
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFE4EAF0)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  readiness?.ready == true
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_off_outlined,
+                  color: statusColor,
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Backend connection',
+                    style: TextStyle(
+                      color: GoRideApp._navy,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _checking ? null : _checkBackend,
+                  child: _checking
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Check'),
+                ),
+              ],
+            ),
+            Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF667085),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'A healthy API does not by itself enable sign-in, driver dispatch or live bookings.',
+              style: TextStyle(
+                color: Color(0xFF667085),
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SecurityBanner extends StatelessWidget {
   const _SecurityBanner();
 
@@ -487,8 +721,8 @@ class _SecurityBanner extends StatelessWidget {
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Ride state is designed to be authoritative on the secure server. '
-              'Live matching and payment are connected in the backend phase.',
+              'Preview mode: live booking, server-calculated fares, driver matching '
+              'and payments are not connected yet.',
               style: TextStyle(
                 color: GoRideApp._navy,
                 fontSize: 13,
@@ -539,7 +773,7 @@ class _RideReviewPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Estimated fare',
+                  'Illustrative demo fare',
                   style: TextStyle(
                     color: Color(0xFF667085),
                     fontSize: 14,
@@ -556,7 +790,7 @@ class _RideReviewPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Final fare comes from the server after route and ride assignment are available.',
+                  'Development placeholder only. This figure is not calculated from a route and is not a real quote. Live fares must come from the backend.',
                   style: TextStyle(
                     color: Color(0xFF667085),
                     fontSize: 13,
@@ -571,17 +805,15 @@ class _RideReviewPage extends StatelessWidget {
             onPressed: () {
               booking.active = true;
               booking.lastRideId =
-                  'GR-${DateTime.now().millisecondsSinceEpoch}';
-              Navigator.of(context).pop(true);
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      _RideRequestStatusPage(booking: booking),
+                  'DEMO-${DateTime.now().millisecondsSinceEpoch}';
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute<void>(
+                  builder: (_) => _RideRequestStatusPage(booking: booking),
                 ),
               );
             },
             icon: const Icon(Icons.local_taxi_outlined),
-            label: const Text('Request ride'),
+            label: const Text('Preview request flow'),
             style: FilledButton.styleFrom(
               backgroundColor: GoRideApp._green,
               foregroundColor: Colors.white,
@@ -740,7 +972,7 @@ class _RideRequestStatusPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  'Ride request created',
+                  'Demo request created',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: GoRideApp._navy,
@@ -758,7 +990,7 @@ class _RideRequestStatusPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  'The customer flow is working. Live driver matching is intentionally not simulated; the next backend phase will connect this request to the authoritative ride service.',
+                  'No driver was contacted. Real ride requests require the backend, driver app and dispatch service.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Color(0xFF667085),
@@ -1005,6 +1237,10 @@ class GoRideBookingDraft {
   RideType type = RideType.auto;
   bool active = false;
   String? lastRideId;
+  Coordinate? pickupCoordinate;
+  Coordinate? destinationCoordinate;
+  String? pickupPinnedLabel;
+  String? destinationPinnedLabel;
 
   bool get isValid => pickup.isNotEmpty && destination.isNotEmpty;
 
