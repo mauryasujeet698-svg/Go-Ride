@@ -32,6 +32,27 @@ void main() {
       expect(find.text('Help & support'), findsOneWidget);
     });
 
+    testWidgets('notifications and support open honest preview screens', (tester) async {
+      await tester.pumpWidget(const GoRideApp());
+      await tester.pump();
+
+      await tester.tap(find.text('Profile'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('Help & support'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(find.text('Quick help'), findsOneWidget);
+      expect(find.text('Is the shown fare final?'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      await tester.tap(find.text('Home'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byTooltip('Notifications'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(find.text('No notifications yet'), findsOneWidget);
+      expect(find.textContaining('does not send or receive live alerts'), findsOneWidget);
+    });
+
     testWidgets('requires both locations before opening ride review', (tester) async {
       await tester.pumpWidget(const GoRideApp());
       await tester.pump();
