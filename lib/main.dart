@@ -199,7 +199,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
       }
       if (!mounted) return;
       setState(() { route=points; distanceKm=km; routeSeconds=secs; fares=quotes; info=quotes.isEmpty ? 'Route found. Fare estimates are temporarily unavailable; no prices have been invented.' : 'Route and estimates use configured services. Booking will revalidate the fare after sign-in.'; });
-      if (points.isNotEmpty) mapController.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(44)));
+      if (points.isNotEmpty) mapController.fitCamera(CameraFit.bounds(bounds: ll.LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(44)));
     } catch (e) { if (mounted) setState(() => error=e.toString().replaceFirst('Exception: ','')); }
     finally { if (mounted) setState(() => busy=false); }
   }
@@ -265,6 +265,7 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 class _LoginScreenState extends State<LoginScreen> {
+  StreamSubscription<AuthState>? authSubscription;
   final phone = TextEditingController();
   final otp = TextEditingController();
   bool sent = false, busy = false;
@@ -276,7 +277,14 @@ class _LoginScreenState extends State<LoginScreen> {
     return raw;
   }
   @override
-  void dispose() { phone.dispose(); otp.dispose(); super.dispose(); }
+  void initState() {
+    super.initState();
+    authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((event) {
+      if (event.session != null && mounted) widget.onSignedIn?.call();
+    });
+  }
+  @override
+  void dispose() { authSubscription?.cancel(); phone.dispose(); otp.dispose(); super.dispose(); }
   Future<void> requestOtp() async {
     if (!phoneE164.startsWith('+') || phoneE164.length < 10) { setState(() => error = 'Enter a valid phone number.'); return; }
     setState(() { busy = true; error = null; });
@@ -292,7 +300,6 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { busy = true; error = null; });
     try {
       await Supabase.instance.client.auth.verifyOTP(phone: phoneE164, token: otp.text.trim(), type: OtpType.sms);
-      if (mounted) widget.onSignedIn?.call();
     } on AuthException catch (e) { if (mounted) setState(() => error = e.message); }
     catch (_) { if (mounted) setState(() => error = 'Verification failed. Please try again.'); }
     finally { if (mounted) setState(() => busy = false); }
@@ -436,6 +443,18 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
 
   Future<void> book(FareQuote q) async {
     if (pickup == null || destination == null || busy) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm your ride'),
+        content: Text('Book ${q.category} for an estimated ${q.currency} ${(q.amountMinor / 100).toStringAsFixed(0)}? The fare and availability will be checked again before the ride is created.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Not yet')),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Confirm booking')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
     setState(() { busy = true; error = null; });
     try {
       final r = await backend.createRide(quote: q, pickupLabel: pickupText.text.trim(), destinationLabel: destinationText.text.trim());
