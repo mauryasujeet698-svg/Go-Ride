@@ -29,15 +29,39 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # app_links 3.4.1 predates AGP 8 and omits its Android namespace.
-      # Patch only the ephemeral Pub cache used by this CI job; no dependency or backend files are changed.
-      - name: Patch namespace in legacy app_links plugin
+      # Older Android plugins may not declare a namespace required by AGP 8.
+      # Patch only the ephemeral Pub cache; the repository dependencies and backend remain unchanged.
+      - name: Patch missing namespaces in legacy Android plugins
         shell: bash
         run: |
-          plugin_gradle="$(find "$PUB_CACHE/hosted/pub.dev" -path '*/app_links-*/android/build.gradle' -print -quit)"
-          if [[ -n "$plugin_gradle" ]] && ! grep -Eq '^[[:space:]]*namespace[[:space:]]' "$plugin_gradle"; then
-            sed -i "/^[[:space:]]*android[[:space:]]*{/a\\    namespace 'com.llfbandit.app_links'" "$plugin_gradle"
-          fi
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          root = pathlib.Path(os.environ["PUB_CACHE"]) / "hosted" / "pub.dev"
+          for build_file in root.glob("*/android/build.gradle"):
+              source = build_file.read_text()
+              if re.search(r"^\\s*namespace\\s", source, re.MULTILINE):
+                  continue
+              manifest = build_file.parent / "src" / "main" / "AndroidManifest.xml"
+              if not manifest.exists():
+                  continue
+              match = re.search(r"""\\bpackage\\s*=\\s*["']([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)+)["']""", manifest.read_text())
+              if not match:
+                  continue
+              namespace = match.group(1)
+              updated, count = re.subn(
+                  r"(^\\s*android\\s*\\{\\s*$)",
+                  lambda item: item.group(1) + "\\n    namespace '" + namespace + "'",
+                  source,
+                  count=1,
+                  flags=re.MULTILINE,
+              )
+              if count:
+                  build_file.write_text(updated)
+                  print(f"Patched legacy Android namespace: {build_file.parent.parent.name} -> {namespace}")
+          PY
 
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed --line-length=120 $(find lib test -name "*.dart" -not -name "*.mocks.dart")
