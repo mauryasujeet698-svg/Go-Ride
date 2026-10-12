@@ -33,7 +33,7 @@ void main() {
       recurrenceRule: RecurrenceRule(
         frequency: Frequency.weekly,
         interval: 1,
-        byWeekDays: {WeekDay.monday.toByWeekDayEntry(), WeekDay.wednesday.toByWeekDayEntry()},
+        byWeekDays: [WeekDay.monday.toByWeekDayEntry(), WeekDay.wednesday.toByWeekDayEntry()],
         // Drives here will be less than 28 days future (to avoid problems with the destination date and drive generation)
         count: 6,
       ),
@@ -109,7 +109,7 @@ void main() {
         recurrenceRule: RecurrenceRule(
           frequency: Frequency.weekly,
           interval: 1,
-          byWeekDays: {WeekDay.monday.toByWeekDayEntry()},
+          byWeekDays: [WeekDay.monday.toByWeekDayEntry()],
           count: 8,
         ),
         recurrenceEndType: RecurrenceEndType.occurrence,
