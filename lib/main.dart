@@ -2,6 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' as ll;
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/app_config.dart';
 import 'data/ride_backend.dart';
@@ -58,159 +62,199 @@ class AuthGate extends StatelessWidget {
 }
 
 
+class PendingBooking {
+  static GeoPoint? pickup;
+  static GeoPoint? destination;
+  static String pickupLabel = '';
+  static String destinationLabel = '';
+  static String category = '';
+}
+
+class PlaceResult {
+  const PlaceResult({required this.label, required this.point});
+  final String label;
+  final GeoPoint point;
+}
+
+class GuestFare {
+  const GuestFare({required this.category, required this.amountMinor, required this.currency, required this.etaSeconds});
+  final String category;
+  final int amountMinor;
+  final String currency;
+  final int etaSeconds;
+}
+
 class PreviewHomeScreen extends StatefulWidget {
   const PreviewHomeScreen({super.key, required this.backendReady});
   final bool backendReady;
-
   @override
   State<PreviewHomeScreen> createState() => _PreviewHomeScreenState();
 }
 
 class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
-  final pickup = TextEditingController(text: 'Your pickup location');
+  static const _tileUrl = String.fromEnvironment('OSM_TILE_URL', defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+  static const _nominatim = String.fromEnvironment('GEOCODER_URL', defaultValue: 'https://nominatim.openstreetmap.org');
+  static const _osrm = String.fromEnvironment('ROUTING_URL', defaultValue: 'https://router.project-osrm.org');
+  final pickup = TextEditingController();
   final destination = TextEditingController();
+  final mapController = MapController();
+  GeoPoint? pickupPoint, destinationPoint;
+  List<ll.LatLng> route = [];
+  List<GuestFare> fares = [];
+  bool busy = false, locating = false, choosePickup = false;
+  String? error, info;
+  double? distanceKm;
+  int? routeSeconds;
 
   @override
-  void dispose() {
-    pickup.dispose();
-    destination.dispose();
-    super.dispose();
+  void dispose() { pickup.dispose(); destination.dispose(); mapController.dispose(); super.dispose(); }
+
+  Future<void> locatePickup() async {
+    setState(() { locating = true; error = null; });
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) throw Exception('Enable location services or search for your pickup address.');
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) throw Exception('Location permission was not granted. You can still search for a pickup address.');
+      final p = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium, timeLimit: Duration(seconds: 15)));
+      pickupPoint = GeoPoint(p.latitude, p.longitude);
+      pickup.text = '${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}';
+      try {
+        final r = await http.get(Uri.parse('$_nominatim/reverse?format=jsonv2&lat=${p.latitude}&lon=${p.longitude}'), headers: {'User-Agent':'GoRideCustomer/0.1'}).timeout(const Duration(seconds: 8));
+        if (r.statusCode == 200) pickup.text = (jsonDecode(r.body) as Map<String,dynamic>)['display_name']?.toString() ?? pickup.text;
+      } catch (_) {}
+      _moveMap(pickupPoint!);
+      if (mounted) setState(() => info = 'Pickup location set.');
+    } catch (e) { if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ','')); }
+    finally { if (mounted) setState(() => locating = false); }
   }
 
-  Future<void> previewRide(String category) async {
-    FocusScope.of(context).unfocus();
-    final from = pickup.text.trim().isEmpty ? 'Pickup not set' : pickup.text.trim();
-    final to = destination.text.trim().isEmpty ? 'Choose a destination when you are ready' : destination.text.trim();
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('$category · Preview only'),
-        content: Text(
-          'From: $from\nTo: $to\n\nThis is a demo preview. No driver will be requested and no ride or payment will be created. Sign in when you want to use live booking.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Got it')),
-        ],
-      ),
-    );
+  Future<void> searchAddress({required bool forPickup}) async {
+    final query = (forPickup ? pickup.text : destination.text).trim();
+    if (query.isEmpty) { setState(() => error = 'Enter an address to search.'); return; }
+    setState(() { busy = true; error = null; });
+    try {
+      final uri = Uri.parse('$_nominatim/search').replace(queryParameters: {'q': query, 'format':'jsonv2', 'limit':'5', 'addressdetails':'1'});
+      final response = await http.get(uri, headers: {'User-Agent':'GoRideCustomer/0.1'}).timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) throw Exception('Address search is temporarily unavailable. Try again shortly.');
+      final rows = (jsonDecode(response.body) as List).cast<Map<String,dynamic>>();
+      if (rows.isEmpty) throw Exception('No matching address found. Try adding the city or area.');
+      final options = rows.map((m) => PlaceResult(label: m['display_name'].toString(), point: GeoPoint(double.parse(m['lat'].toString()), double.parse(m['lon'].toString())))).toList();
+      if (!mounted) return;
+      if (options.length == 1) { _selectPlace(options.first, forPickup: forPickup); }
+      else {
+        await showModalBottomSheet<void>(context: context, showDragHandle: true, builder: (ctx) => SafeArea(child: ListView(shrinkWrap:true, children: [
+          const ListTile(title: Text('Choose an address')),
+          for (final option in options) ListTile(leading: const Icon(Icons.place_outlined), title: Text(option.label, maxLines: 3, overflow: TextOverflow.ellipsis), onTap: () { Navigator.pop(ctx); _selectPlace(option, forPickup: forPickup); }),
+        ])));
+      }
+    } catch (e) { if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ','')); }
+    finally { if (mounted) setState(() => busy = false); }
   }
 
-  Future<void> openSignIn() async {
-    if (!widget.backendReady) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Live sign-in is temporarily unavailable. You can still explore the demo.')),
-      );
-      return;
-    }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => LoginScreen(
-          onSignedIn: () => Navigator.of(context).pop(),
-        ),
-      ),
-    );
+  void _selectPlace(PlaceResult result, {required bool forPickup}) {
+    setState(() {
+      if (forPickup) { pickupPoint = result.point; pickup.text = result.label; }
+      else { destinationPoint = result.point; destination.text = result.label; }
+      fares = []; route = []; distanceKm = null; routeSeconds = null; info = null; error = null;
+    });
+    _moveMap(forPickup ? pickupPoint! : destinationPoint!);
+    if (pickupPoint != null && destinationPoint != null) getRouteAndFares();
+  }
+
+  void _moveMap(GeoPoint point) { try { mapController.move(ll.LatLng(point.latitude, point.longitude), 14); } catch (_) {} }
+
+  void _mapTap(TapPosition tap, ll.LatLng point) {
+    final selected = GeoPoint(point.latitude, point.longitude);
+    setState(() {
+      if (choosePickup || pickupPoint == null) { pickupPoint = selected; pickup.text = '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}'; }
+      else { destinationPoint = selected; destination.text = '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}'; }
+      choosePickup = false; fares = []; route = []; distanceKm = null; routeSeconds = null;
+      info = 'Map location selected. Search an address if you want a readable place name.';
+    });
+    if (pickupPoint != null && destinationPoint != null) getRouteAndFares();
+  }
+
+  Future<void> getRouteAndFares() async {
+    final a = pickupPoint, b = destinationPoint;
+    if (a == null || b == null) { setState(() => error = 'Set both pickup and destination first.'); return; }
+    setState(() { busy = true; error = null; info = null; fares = []; });
+    try {
+      final uri = Uri.parse('$_osrm/route/v1/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}').replace(queryParameters: {'overview':'full','geometries':'geojson','steps':'false'});
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) throw Exception('Route service is unavailable. Try again later or choose locations on the map.');
+      final data = jsonDecode(response.body) as Map<String,dynamic>;
+      final routes = (data['routes'] as List?) ?? [];
+      if (routes.isEmpty) throw Exception('No drivable route was found between those locations.');
+      final r = Map<String,dynamic>.from(routes.first as Map);
+      final coords = (r['geometry']['coordinates'] as List).cast<List<dynamic>>();
+      final points = coords.map((c) => ll.LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())).toList();
+      final km = (r['distance'] as num).toDouble()/1000;
+      final secs = (r['duration'] as num).round();
+      if (km > 200) throw Exception('This service currently supports trips up to 200 km.');
+      List<GuestFare> quotes = [];
+      if (widget.backendReady) {
+        final rows = await Supabase.instance.client.rpc('estimate_guest_fares', params: {'p_distance_km':km, 'p_eta_seconds':secs});
+        quotes = (rows as List).map((x) { final m=Map<String,dynamic>.from(x as Map); return GuestFare(category:m['category'].toString(), amountMinor:(m['amount_minor'] as num).toInt(), currency:m['currency'].toString().trim(), etaSeconds:(m['eta_seconds'] as num).toInt()); }).toList();
+      }
+      if (!mounted) return;
+      setState(() { route=points; distanceKm=km; routeSeconds=secs; fares=quotes; info=quotes.isEmpty ? 'Route found. Fare estimates are temporarily unavailable; no prices have been invented.' : 'Route and estimates use configured services. Booking will revalidate the fare after sign-in.'; });
+      if (points.isNotEmpty) mapController.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(44)));
+    } catch (e) { if (mounted) setState(() => error=e.toString().replaceFirst('Exception: ','')); }
+    finally { if (mounted) setState(() => busy=false); }
+  }
+
+  Future<void> book(GuestFare fare) async {
+    PendingBooking.pickup=pickupPoint; PendingBooking.destination=destinationPoint;
+    PendingBooking.pickupLabel=pickup.text.trim(); PendingBooking.destinationLabel=destination.text.trim(); PendingBooking.category=fare.category;
+    if (!widget.backendReady) { setState(() => error='Sign-in and booking are unavailable until backend configuration is restored.'); return; }
+    await Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => LoginScreen(onSignedIn: () => Navigator.of(context).pop())));
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Go-Ride'),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 12),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(30)),
-              child: const Text('GUEST PREVIEW', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF087E72))),
-            ),
-          ),
-        ),
-      ],
-    ),
-    body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              color: const Color(0xFF087E72),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.local_taxi_rounded, size: 42, color: Colors.white),
-                SizedBox(height: 14),
-                Text('Your ride, your time.', style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold)),
-                SizedBox(height: 8),
-                Text('Explore Go-Ride before creating an account.', style: TextStyle(color: Colors.white70)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          if (!widget.backendReady)
-            const Message(text: 'Offline preview mode. Live sign-in and ride requests are unavailable right now.'),
-          const Text('Plan your ride', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          TextField(
-            controller: pickup,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Pickup (demo)', prefixIcon: Icon(Icons.my_location)),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: destination,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Where to?', hintText: 'Enter a destination to preview', prefixIcon: Icon(Icons.location_on_outlined)),
-          ),
-          const SizedBox(height: 20),
-          const Text('Choose a ride to preview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.electric_rickshaw, size: 32, color: Color(0xFF087E72)),
-              title: const Text('Auto'),
-              subtitle: const Text('Affordable city trips'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => previewRide('Auto'),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.directions_car_filled, size: 32, color: Color(0xFF087E72)),
-              title: const Text('Mini'),
-              subtitle: const Text('Everyday rides'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => previewRide('Mini'),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.local_taxi, size: 32, color: Color(0xFF087E72)),
-              title: const Text('Sedan'),
-              subtitle: const Text('Extra comfort'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => previewRide('Sedan'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: openSignIn,
-            icon: const Icon(Icons.phone_android),
-            label: const Text('Sign in for live booking'),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'You are browsing as a guest. Preview selections do not create real rides or use your location.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.black54),
-          ),
+  Widget build(BuildContext context) {
+    final center = pickupPoint != null ? ll.LatLng(pickupPoint!.latitude,pickupPoint!.longitude) : const ll.LatLng(20.5937,78.9629);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Go-Ride'), actions: [Padding(padding: const EdgeInsets.only(right:12), child: Center(child: Container(padding: const EdgeInsets.symmetric(horizontal:10,vertical:6), decoration: BoxDecoration(color:Colors.teal.shade50,borderRadius:BorderRadius.circular(30)), child: const Text('EXPLORE',style:TextStyle(fontSize:10,fontWeight:FontWeight.bold,color:Color(0xFF087E72)))))]),
+      body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
+        const Text('Where would you like to go?',style:TextStyle(fontSize:23,fontWeight:FontWeight.bold)),
+        const SizedBox(height:6),
+        const Text('Explore routes and fare estimates without signing in. Sign-in is required only to request a real ride.'),
+        const SizedBox(height:14),
+        ClipRRect(borderRadius:BorderRadius.circular(18), child:SizedBox(height:300, child: FlutterMap(mapController:mapController, options:MapOptions(initialCenter:center,initialZoom:4,onTap:_mapTap), children:[
+          TileLayer(urlTemplate:_tileUrl,userAgentPackageName:'com.goride.customer', maxZoom:19),
+          if (route.isNotEmpty) PolylineLayer(polylines:[Polyline(points:route,color:const Color(0xFF087E72),strokeWidth:5)]),
+          MarkerLayer(markers:[
+            if(pickupPoint!=null) Marker(point:ll.LatLng(pickupPoint!.latitude,pickupPoint!.longitude),width:42,height:42,child:const Icon(Icons.trip_origin,color:Color(0xFF087E72),size:32)),
+            if(destinationPoint!=null) Marker(point:ll.LatLng(destinationPoint!.latitude,destinationPoint!.longitude),width:42,height:42,child:const Icon(Icons.location_pin,color:Colors.red,size:40)),
+          ]),
+          RichAttributionWidget(attributions:[TextSourceAttribution('© OpenStreetMap contributors')]),
+        ]))),
+        const SizedBox(height:8),
+        Row(children:[Expanded(child:OutlinedButton.icon(onPressed:locating?null:locatePickup,icon:locating?const SizedBox(width:16,height:16,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.my_location),label:const Text('Use my location'))),const SizedBox(width:8),Expanded(child:OutlinedButton.icon(onPressed:()=>setState(()=>choosePickup=true),icon:const Icon(Icons.touch_app),label:const Text('Tap map to set pickup')))]),
+        const SizedBox(height:12),
+        TextField(controller:pickup,textCapitalization:TextCapitalization.words,decoration:InputDecoration(labelText:'Pickup location',prefixIcon:const Icon(Icons.trip_origin),suffixIcon:IconButton(tooltip:'Search pickup',onPressed:busy?null:()=>searchAddress(forPickup:true),icon:const Icon(Icons.search))),onSubmitted:(_)=>searchAddress(forPickup:true)),
+        const SizedBox(height:10),
+        TextField(controller:destination,textCapitalization:TextCapitalization.words,decoration:InputDecoration(labelText:'Destination',hintText:'Search address or tap map',prefixIcon:const Icon(Icons.location_on_outlined),suffixIcon:IconButton(tooltip:'Search destination',onPressed:busy?null:()=>searchAddress(forPickup:false),icon:const Icon(Icons.search))),onSubmitted:(_)=>searchAddress(forPickup:false)),
+        const SizedBox(height:12),
+        FilledButton.icon(onPressed:busy?null:getRouteAndFares,icon:busy?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.route),label:Text(busy?'Finding route…':'Show route and fares')),
+        if(error!=null) Message(text:error!,isError:true),
+        if(info!=null) Message(text:info!),
+        if(distanceKm!=null) Card(child:ListTile(leading:const Icon(Icons.route,color:Color(0xFF087E72)),title:Text('${distanceKm!.toStringAsFixed(1)} km by road'),subtitle:Text('Estimated travel time ${((routeSeconds??0)/60).ceil()} min'))),
+        if(fares.isNotEmpty) ...[
+          const SizedBox(height:6),const Text('Choose a ride',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+          for(final fare in fares) Card(child:ListTile(
+            leading:Icon(fare.category=='AUTO'?Icons.electric_rickshaw:fare.category=='MINI'?Icons.directions_car_filled:Icons.local_taxi,color:const Color(0xFF087E72),size:30),
+            title:Text(fare.category),subtitle:Text('Estimated · ${((fare.etaSeconds)/60).ceil()} min · route ${distanceKm!.toStringAsFixed(1)} km'),
+            trailing:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.end,children:[Text('${fare.currency} ${(fare.amountMinor/100).toStringAsFixed(0)}',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),const Text('Book',style:TextStyle(color:Color(0xFF087E72)))]),
+            onTap:()=>book(fare),
+          )),
         ],
-      ),
-    ),
-  );
+        const SizedBox(height:12),
+        const Text('Map data © OpenStreetMap contributors. Public map, routing and address-search endpoints are development defaults, not guaranteed production infrastructure.',style:TextStyle(fontSize:11,color:Colors.black54)),
+      ])),
+    );
+  }
 }
 
 class LoginScreen extends StatefulWidget {
@@ -265,6 +309,23 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 8),
           const Text('Reliable rides, one tap away.', textAlign: TextAlign.center),
           const SizedBox(height: 32),
+          OutlinedButton.icon(
+            onPressed: busy ? null : () async {
+              setState(() { busy = true; error = null; });
+              try {
+                await Supabase.instance.client.auth.signInWithOAuth(OAuthProvider.google, redirectTo: 'io.supabase.goride://login-callback/');
+              } on AuthException catch (e) {
+                if (mounted) setState(() => error = e.message);
+              } catch (_) {
+                if (mounted) setState(() => error = 'Google sign-in could not be started. Check OAuth configuration.');
+              } finally { if (mounted) setState(() => busy = false); }
+            },
+            icon: const Icon(Icons.g_mobiledata, size: 28),
+            label: const Text('Continue with Google'),
+          ),
+          const SizedBox(height: 16),
+          const Row(children: [Expanded(child: Divider()), Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('OR USE MOBILE NUMBER')), Expanded(child: Divider())]),
+          const SizedBox(height: 16),
           TextField(controller: phone, keyboardType: TextInputType.phone, enabled: !sent && !busy,
             decoration: const InputDecoration(labelText: 'Mobile number', hintText: '98765 43210', prefixIcon: Icon(Icons.phone_android), helperText: 'Indian numbers can be entered without +91.')),
           if (sent) ...[
@@ -303,7 +364,19 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
   int lastSeq = 0;
 
   @override
-  void initState() { super.initState(); restoreRide(); locate(); }
+  void initState() {
+    super.initState();
+    restoreRide();
+    final pendingPickup = PendingBooking.pickup;
+    final pendingDestination = PendingBooking.destination;
+    if (pendingPickup != null && pendingDestination != null) {
+      pickup = pendingPickup;
+      destination = pendingDestination;
+      pickupText.text = PendingBooking.pickupLabel;
+      destinationText.text = PendingBooking.destinationLabel;
+      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) estimate(); });
+    } else { locate(); }
+  }
   @override
   void dispose() { eventSub?.cancel(); pickupText.dispose(); destinationText.dispose(); super.dispose(); }
 
@@ -341,9 +414,11 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
     if (destinationText.text.trim().isEmpty) { setState(() => error = 'Enter a destination address.'); return; }
     setState(() { busy = true; error = null; notice = null; quotes = []; });
     try {
-      final places = await locationFromAddress(destinationText.text.trim());
-      if (places.isEmpty) throw Exception('Could not find that address. Try a fuller destination.');
-      destination = GeoPoint(places.first.latitude, places.first.longitude);
+      if (destination == null) {
+        final places = await locationFromAddress(destinationText.text.trim());
+        if (places.isEmpty) throw Exception('Could not find that address. Try a fuller destination.');
+        destination = GeoPoint(places.first.latitude, places.first.longitude);
+      }
       final result = await backend.estimate(pickup!, destination!);
       if (mounted) setState(() { quotes = result; if (result.isEmpty) notice = 'No ride categories are currently available.'; });
     } on PostgrestException catch (e) { if (mounted) setState(() => error = friendlyError(e.message)); }
