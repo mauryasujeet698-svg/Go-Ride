@@ -29,6 +29,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Preserve resolved dependency lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-ride-resolved-lockfile-${{ github.run_id }}
+          path: pubspec.lock
+          if-no-files-found: error
+          retention-days: 14
+
       # Older Android plugins may need namespace/buildConfig declarations for AGP 8.
       # Patch only the ephemeral Pub cache; repository dependencies and backend configuration stay unchanged.
       - name: Patch legacy Android plugin metadata for AGP 8
