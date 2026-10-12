@@ -350,7 +350,7 @@ void main() {
         final RecurrenceRule recurrenceRule = RecurrenceRule(
           frequency: Frequency.weekly,
           interval: intervalSize,
-          byWeekDays: weekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toSet(),
+          byWeekDays: weekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toList(),
           until: untilTime,
         );
 
