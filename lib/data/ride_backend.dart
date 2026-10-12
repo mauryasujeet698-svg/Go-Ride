@@ -55,6 +55,7 @@ class RideBackend {
   RideBackend(this.client);
   final SupabaseClient client;
   static const _uuid = Uuid();
+  final Map<String, String> _createKeys = <String, String>{};
 
   Future<List<FareQuote>> estimate(GeoPoint pickup, GeoPoint destination) async {
     final data = await client.rpc('estimate_fares', params: {
@@ -69,7 +70,7 @@ class RideBackend {
   Future<RideRecord> createRide({required FareQuote quote, required String pickupLabel, required String destinationLabel}) async {
     final data = await client.rpc('create_ride', params: {
       'p_quote_id': quote.id,
-      'p_idempotency_key': _uuid.v4(),
+      'p_idempotency_key': _createKeys.putIfAbsent(quote.id, () => _uuid.v4()),
       'p_pickup_label': pickupLabel,
       'p_destination_label': destinationLabel,
     });

@@ -53,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool sent = false, busy = false;
   String? error;
   String get phoneE164 {
-    final raw = phone.text.trim().replaceAll(RegExp(r'[\\s()-]'), '');
+    final raw = phone.text.trim().replaceAll(RegExp(r'[\s()-]'), '');
     if (raw.startsWith('+')) return raw;
     if (raw.length == 10) return '+91$raw';
     return raw;
