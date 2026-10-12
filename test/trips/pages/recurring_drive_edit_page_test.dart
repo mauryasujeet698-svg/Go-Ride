@@ -131,7 +131,7 @@ void main() {
           recurrenceRule: RecurrenceRule(
             frequency: Frequency.weekly,
             interval: 1,
-            byWeekDays: {WeekDay.monday.toByWeekDayEntry()},
+            byWeekDays: [WeekDay.monday.toByWeekDayEntry()],
             until: DateTime.now().add(Trip.creationInterval).toUtc(),
           ),
         );
@@ -211,7 +211,7 @@ void main() {
           recurrenceRule: RecurrenceRule(
               frequency: Frequency.weekly,
               interval: oldIntervalSize,
-              byWeekDays: oldWeekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toSet(),
+              byWeekDays: oldWeekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toList(),
               until: oldUntilTime),
           recurrenceEndType: RecurrenceEndType.date,
         );
@@ -245,7 +245,7 @@ void main() {
                       RecurrenceRule(
                           frequency: Frequency.weekly,
                           interval: newIntervalSize,
-                          byWeekDays: newWeekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toSet(),
+                          byWeekDays: newWeekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toList(),
                           until: newUntilTime),
                       recurringDrive.startedAt)
                   .toString(),
