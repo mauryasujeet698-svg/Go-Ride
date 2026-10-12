@@ -65,7 +65,7 @@ class RecurringDriveFactory extends ModelFactory<RecurringDrive> {
           byWeekDays: (List<int>.generate(7, (index) => index)..shuffle())
               .take(random.nextInt(7))
               .map((day) => ByWeekDayEntry(day + 1))
-              .toSet(),
+              .toList(),
         );
 
     final List<Drive>? generatedDrives = drives ??
