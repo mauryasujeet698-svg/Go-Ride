@@ -29,9 +29,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Older Android plugins may not declare a namespace required by AGP 8.
-      # Patch only the ephemeral Pub cache; the repository dependencies and backend remain unchanged.
-      - name: Patch missing namespaces in legacy Android plugins
+      # Older Android plugins may need namespace/buildConfig declarations for AGP 8.
+      # Patch only the ephemeral Pub cache; repository dependencies and backend configuration stay unchanged.
+      - name: Patch legacy Android plugin metadata for AGP 8
         shell: bash
         run: |
           python3 - <<'PY'
@@ -41,26 +41,37 @@ jobs:
 
           root = pathlib.Path(os.environ["PUB_CACHE"]) / "hosted" / "pub.dev"
           for build_file in root.glob("*/android/build.gradle"):
-              source = build_file.read_text()
-              if re.search(r"^\s*namespace\s", source, re.MULTILINE):
-                  continue
-              manifest = build_file.parent / "src" / "main" / "AndroidManifest.xml"
-              if not manifest.exists():
-                  continue
-              match = re.search(r"""\bpackage\s*=\s*["']([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)["']""", manifest.read_text())
-              if not match:
-                  continue
-              namespace = match.group(1)
-              updated, count = re.subn(
-                  r"(^\s*android\s*\{\s*$)",
-                  lambda item: item.group(1) + "\n    namespace '" + namespace + "'",
-                  source,
-                  count=1,
-                  flags=re.MULTILINE,
-              )
-              if count:
-                  build_file.write_text(updated)
-                  print(f"Patched legacy Android namespace: {build_file.parent.parent.name} -> {namespace}")
+              original = build_file.read_text()
+              source = original
+              if not re.search(r"^\s*namespace\s", source, re.MULTILINE):
+                  manifest = build_file.parent / "src" / "main" / "AndroidManifest.xml"
+                  if manifest.exists():
+                      match = re.search(r"""\bpackage\s*=\s*["']([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)["']""", manifest.read_text())
+                      if match:
+                          namespace = match.group(1)
+                          source, count = re.subn(
+                              r"(^\s*android\s*\{\s*$)",
+                              lambda item: item.group(1) + "\n    namespace '" + namespace + "'",
+                              source,
+                              count=1,
+                              flags=re.MULTILINE,
+                          )
+                          if count:
+                              print(f"Patched namespace: {build_file.parent.parent.name} -> {namespace}")
+              if re.search(r"\bbuildConfigField\b", source) and not re.search(
+                  r"buildFeatures\s*\{[^}]*\bbuildConfig\s+true", source, re.DOTALL
+              ):
+                  source, count = re.subn(
+                      r"(^\s*android\s*\{\s*$)",
+                      lambda item: item.group(1) + "\n    buildFeatures {\n        buildConfig true\n    }",
+                      source,
+                      count=1,
+                      flags=re.MULTILINE,
+                  )
+                  if count:
+                      print(f"Enabled BuildConfig for: {build_file.parent.parent.name}")
+              if source != original:
+                  build_file.write_text(source)
           PY
 
       - name: Verify formatting
