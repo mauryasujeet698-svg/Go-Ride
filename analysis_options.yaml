@@ -7,7 +7,6 @@ analyzer:
 linter:
   rules:
     - always_declare_return_types
-    - always_require_non_null_named_parameters
     - always_specify_types
     - annotate_overrides
     - avoid_bool_literals_in_conditional_expressions
@@ -28,8 +27,6 @@ linter:
     - avoid_redundant_argument_values
     - avoid_renaming_method_parameters
     - avoid_return_types_on_setters
-    - avoid_returning_null
-    - avoid_returning_null_for_future
     - avoid_returning_null_for_void
     - avoid_setters_without_getters
     - avoid_shadowing_type_parameters
@@ -61,12 +58,10 @@ linter:
     - file_names
     - hash_and_equals
     - implementation_imports
-    - iterable_contains_unrelated_type
     - leading_newlines_in_multiline_strings
     - library_names
     - library_prefixes
     - library_private_types_in_public_api
-    - list_remove_unrelated_type
     - missing_whitespace_between_adjacent_strings
     - no_adjacent_strings_in_list
     - no_duplicate_case_values
@@ -80,7 +75,6 @@ linter:
     - null_closures
     - only_throw_errors
     - overridden_fields
-    - package_api_docs
     - package_names
     - package_prefixed_library_names
     - prefer_adjacent_string_concatenation
@@ -92,7 +86,6 @@ linter:
     - prefer_const_declarations
     - prefer_const_literals_to_create_immutables
     - prefer_contains
-    - prefer_equal_for_default_values
     - prefer_final_fields
     - prefer_final_in_for_each
     - prefer_final_locals
@@ -149,7 +142,6 @@ linter:
     - unnecessary_this
     - unnecessary_to_list_in_spreads
     - unrelated_type_equality_checks
-    - unsafe_html
     - use_build_context_synchronously
     - use_colored_box
     - use_enums
