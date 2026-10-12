@@ -1,2 +1,0 @@
-io.supabase.flutter://reset-callback/
-io.supabase.flutter://login-callback/

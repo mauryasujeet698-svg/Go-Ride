@@ -1,8 +1,0 @@
-/* 
-  InfoPlist.strings
-  Runner
-
-  Created by Fynn Starke on 26.02.23.
-  
-*/
-"NSPhotoLibraryUsageDescription" = "We need access to your photos to update your profile picture.";
