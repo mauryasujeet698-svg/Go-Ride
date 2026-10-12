@@ -105,6 +105,7 @@ void main() {
       recurringDrive = RecurringDriveFactory().generateFake(
         start: 'Start',
         destination: 'Destination',
+        startedAt: DateTime.now().add(const Duration(days: 60)),
         recurrenceRule: RecurrenceRule(
           frequency: Frequency.weekly,
           interval: 1,
