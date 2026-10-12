@@ -46,25 +46,29 @@ void main() {
     expect((amountMinor / 100).toStringAsFixed(2), '125.50');
   });
 
-  testWidgets('guest preview opens without sign-in or location permission', (tester) async {
+  testWidgets('guest can explore route planning without signing in', (tester) async {
     tester.view.physicalSize = const Size(430, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
-    expect(find.text('GUEST PREVIEW'), findsOneWidget);
-    expect(find.text('Plan your ride'), findsOneWidget);
-    expect(find.text('Auto'), findsOneWidget);
-    expect(find.text('Mini'), findsOneWidget);
-    expect(find.text('Sedan'), findsOneWidget);
-    expect(find.text('Sign in for live booking'), findsOneWidget);
+    expect(find.text('EXPLORE'), findsOneWidget);
+    expect(find.text('Where would you like to go?'), findsOneWidget);
+    expect(find.text('Pickup location'), findsOneWidget);
+    expect(find.text('Destination'), findsOneWidget);
+    expect(find.text('Show route and fares'), findsOneWidget);
+    expect(find.textContaining('without signing in'), findsOneWidget);
   });
 
-  testWidgets('guest can inspect demo ride without creating a ride', (tester) async {
+  testWidgets('guest screen does not show demo ride confirmations', (tester) async {
+    tester.view.physicalSize = const Size(430, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
-    await tester.tap(find.text('Auto'));
-    await tester.pumpAndSettle();
-    expect(find.text('Auto · Preview only'), findsOneWidget);
-    expect(find.textContaining('no ride or payment will be created'), findsOneWidget);
+    expect(find.textContaining('Preview only'), findsNothing);
+    expect(find.textContaining('no ride or payment will be created'), findsNothing);
+    expect(find.text('Show route and fares'), findsOneWidget);
   });
+
 }
