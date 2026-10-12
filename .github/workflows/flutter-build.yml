@@ -110,7 +110,7 @@ jobs:
           if grep -q '^android.defaults.buildfeatures.buildconfig=' android/gradle.properties; then
             sed -i 's/^android.defaults.buildfeatures.buildconfig=.*/android.defaults.buildfeatures.buildconfig=true/' android/gradle.properties
           else
-            printf '\\nandroid.defaults.buildfeatures.buildconfig=true\\n' >> android/gradle.properties
+            echo 'android.defaults.buildfeatures.buildconfig=true' >> android/gradle.properties
           fi
 
       - name: Verify formatting
