@@ -199,7 +199,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
       }
       if (!mounted) return;
       setState(() { route=points; distanceKm=km; routeSeconds=secs; fares=quotes; info=quotes.isEmpty ? 'Route found. Fare estimates are temporarily unavailable; no prices have been invented.' : 'Route and estimates use configured services. Booking will revalidate the fare after sign-in.'; });
-      if (points.isNotEmpty) mapController.fitCamera(CameraFit.bounds(bounds: ll.LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(44)));
+      if (points.isNotEmpty) mapController.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(44)));
     } catch (e) { if (mounted) setState(() => error=e.toString().replaceFirst('Exception: ','')); }
     finally { if (mounted) setState(() => busy=false); }
   }
