@@ -10,7 +10,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(
     url: AppConfig.supabaseUrl,
-    anonKey: AppConfig.supabasePublishableKey,
+    publishableKey: AppConfig.supabasePublishableKey,
     authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
   );
   runApp(const GoRideApp());
