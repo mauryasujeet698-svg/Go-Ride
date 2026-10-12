@@ -17,11 +17,11 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '11'
+          java-version: '17'
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.7.1'
+          flutter-version: '3.29.3'
           channel: 'stable'
 
       - name: Install dependencies
@@ -51,6 +51,14 @@ jobs:
           flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols
           echo "APK sizes (bytes):"
           find build/app/outputs/flutter-apk -maxdepth 1 -name '*.apk' -type f -printf '%f %s\n' | sort
+          while IFS= read -r apk; do
+            size=$(stat -c%s "$apk")
+            if [ "$size" -gt $((25 * 1024 * 1024)) ]; then
+              echo "APK exceeds 25 MiB limit: $apk ($size bytes)"
+              exit 1
+            fi
+            echo "Verified size limit: $apk ($size bytes)"
+          done < <(find build/app/outputs/flutter-apk -maxdepth 1 -name '*.apk' -type f)
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
