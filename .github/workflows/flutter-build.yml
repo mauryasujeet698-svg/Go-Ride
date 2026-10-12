@@ -14,6 +14,11 @@ jobs:
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.7.1'
@@ -31,11 +36,29 @@ jobs:
       - name: Verify translations
         shell: bash
         run: |
-          if [[ "$(< lib/l10n/untranslatedMessages.txt)" == "{}" ]]; then
+          if [[ "$( < lib/l10n/untranslatedMessages.txt )" == "{}" ]]; then
             exit 0
           else
             exit 1
           fi
+
+      # This is an installable CI test APK, signed with Android's debug key.
+      # It is not a production/Play Store release. The source build.gradle is
+      # left unchanged; only the ephemeral runner copy is adjusted for signing.
+      - name: Build optimized per-ABI APKs
+        run: |
+          sed -i 's/signingConfig signingConfigs.release/signingConfig signingConfigs.debug/' android/app/build.gradle
+          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols
+          echo "APK sizes (bytes):"
+          find build/app/outputs/flutter-apk -maxdepth 1 -name '*.apk' -type f -printf '%f %s\n' | sort
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: motis-ridesharing-apks
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Generate coverage_helper file
         run: ./scripts/coverage_helper.sh
@@ -44,4 +67,3 @@ jobs:
         run: flutter test --coverage
 
       - uses: codecov/codecov-action@v3
-        
