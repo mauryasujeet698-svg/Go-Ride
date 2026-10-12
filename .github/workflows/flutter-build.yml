@@ -58,6 +58,18 @@ jobs:
                           )
                           if count:
                               print(f"Patched namespace: {build_file.parent.parent.name} -> {namespace}")
+              # app_links 3.4.1 ships an Android library manifest without a package
+              # attribute, so derive its known namespace explicitly for AGP 8.
+              if build_file.parent.parent.name == "app_links" and not re.search(r"^\s*namespace\s", source, re.MULTILINE):
+                  source, count = re.subn(
+                      r"(^\s*android\s*\{\s*$)",
+                      lambda item: item.group(1) + "\\n    namespace 'com.llfbandit.app_links'",
+                      source,
+                      count=1,
+                      flags=re.MULTILINE,
+                  )
+                  if count:
+                      print("Patched namespace: app_links -> com.llfbandit.app_links")
               if re.search(r"\bbuildConfigField\b", source) and not re.search(
                   r"buildFeatures\s*\{[^}]*\bbuildConfig\s+true", source, re.DOTALL
               ):
