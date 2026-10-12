@@ -5,7 +5,6 @@ import 'package:motis_mitfahr_app/trips/models/drive.dart';
 import 'package:motis_mitfahr_app/trips/models/recurring_drive.dart';
 import 'package:motis_mitfahr_app/trips/models/trip.dart';
 import 'package:motis_mitfahr_app/trips/util/recurrence/recurrence.dart';
-import 'package:motis_mitfahr_app/util/extensions/time_of_day_extension.dart';
 import 'package:rrule/rrule.dart';
 
 import 'drive_factory.dart';
