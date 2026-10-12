@@ -116,11 +116,11 @@
   "pageHomeTitle": "Home",
 
   "pageAboutTitle": "Über uns",
-  "pageAboutLogoSemantics": "MOTIS Logo",
+  "pageAboutLogoSemantics": "Go-Ride-Logo",
   "pageAboutVersion": "Version {version}",
   "pageAboutBuildNumber": "Build-Nummer: {number}",
   "pageAboutBuildSignature": "Build-Signatur: {signature}",
-  "pageAboutText": "Diese App wurde von einer Gruppe Studierender an der TU Darmstadt programmiert.\nLizensiert unter der MIT-Lizenz",
+  "pageAboutText": "Go Ride hilft Menschen, Fahrten zu finden und anzubieten.",
   "pageAboutGithub": "GitHub",
   "pageAboutWebsite": "Website",
   "pageAboutTermsOfService": "Nutzungsbedingungen",
@@ -461,5 +461,5 @@
   "widgetTripOverviewSinceDate": "Seit {date}",
   "widgetTripOverviewFromDate": "Ab {date}",
   
-  "appName": "Motis Mitfahr-App"
+  "appName": "Go Ride"
 }

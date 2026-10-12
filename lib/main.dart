@@ -15,9 +15,8 @@ import 'welcome/pages/reset_password_page.dart';
 import 'welcome/pages/welcome_page.dart';
 
 void main() async {
-  await dotenv.load();
-
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load();
   await supabaseManager.initialize();
   await themeManager.loadTheme();
   await localeManager.loadCurrentLocale();

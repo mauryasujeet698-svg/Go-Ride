@@ -4,8 +4,7 @@ import 'package:flutter_svg/svg.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
-const String githubLink = 'https://github.com/MOTIS-Mitfahr-App/flutter-app';
-const String websiteLink = 'https://motis-project.de/';
+const String githubLink = 'https://github.com/mauryasujeet698-svg/Go-Ride';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -96,10 +95,6 @@ class _AboutPageState extends State<AboutPage> {
                                 mode: LaunchMode.externalApplication,
                               ),
                               child: Text(S.of(context).pageAboutGithub),
-                            ),
-                            TextButton(
-                              onPressed: () async => launchUrlString(websiteLink),
-                              child: Text(S.of(context).pageAboutWebsite),
                             ),
                           ],
                         ),
