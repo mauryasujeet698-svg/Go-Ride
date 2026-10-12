@@ -47,6 +47,10 @@ void main() {
   });
 
   testWidgets('guest preview opens without sign-in or location permission', (tester) async {
+    await tester.view.setPhysicalSize(const Size(430, 1400));
+    await tester.view.setDevicePixelRatio(1);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
     expect(find.text('GUEST PREVIEW'), findsOneWidget);
     expect(find.text('Plan your ride'), findsOneWidget);
