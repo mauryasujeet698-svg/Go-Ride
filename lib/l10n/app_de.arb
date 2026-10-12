@@ -116,11 +116,11 @@
   "pageHomeTitle": "Home",
 
   "pageAboutTitle": "Über uns",
-  "pageAboutLogoSemantics": "MOTIS Logo",
+  "pageAboutLogoSemantics": "Go Ride-Logo",
   "pageAboutVersion": "Version {version}",
   "pageAboutBuildNumber": "Build-Nummer: {number}",
   "pageAboutBuildSignature": "Build-Signatur: {signature}",
-  "pageAboutText": "Diese App wurde von einer Gruppe Studierender an der TU Darmstadt programmiert.\nLizensiert unter der MIT-Lizenz",
+  "pageAboutText": "Go Ride ist eine Mitfahr-App auf Grundlage des Open-Source-Projekts MOTIS.\nDas ursprüngliche Projekt steht unter der MIT-Lizenz.",
   "pageAboutGithub": "GitHub",
   "pageAboutWebsite": "Website",
   "pageAboutTermsOfService": "Nutzungsbedingungen",
@@ -183,8 +183,8 @@
   "pageHelpTitle": "Hilfe",
   "pageHelpContactUs": "Kontaktiere uns",
   "pageHelpEmailSubject": "Anfrage von User-ID [{id}]",
-  "pageHelpQuestion1": "Was ist MOTIS?",
-  "pageHelpAnswer1": "MOTIS umfasst viele Tools zur Unterstützung des intermodalen Routings. Das Ziel ist es, bei der Planung von Reisen zu helfen, die öffentliche Verkehrsmittel, Bike-Sharing, Ride-Sharing und weitere Transportmittel umfassen.",
+  "pageHelpQuestion1": "Was ist Go Ride?",
+  "pageHelpAnswer1": "Go Ride hilft Menschen, gemeinsame Fahrten anzubieten, zu finden und bei anderen Nutzern zu buchen.",
   "pageHelpQuestion2": "Wie viel kosten Fahrten? Wie kann ich bezahlen?",
   "pageHelpAnswer2": "Wir haben den Zahlungsprozess so konzipiert, dass er sich vollständig auf Benutzer*innenvereinbarungen stützt. Sowohl die Kosten als auch die Zahlungsmethode einer Fahrt können persönlich oder in unserem In-App-Chat ausgehandelt werden. Als Ausgangspunkt siehst du für die meisten Fahrten einen Preisvorschlag.",
   "pageHelpQuestion3": "Wir haben uns auf einen Preis geeinigt, aber jetzt zahlt mein*e Fahrer*in ihn nicht. Was kann ich machen?",
@@ -461,5 +461,5 @@
   "widgetTripOverviewSinceDate": "Seit {date}",
   "widgetTripOverviewFromDate": "Ab {date}",
   
-  "appName": "Motis Mitfahr-App"
+  "appName": "Go Ride"
 }
