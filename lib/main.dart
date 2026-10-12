@@ -8,16 +8,26 @@ import 'data/ride_backend.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(
-    url: AppConfig.supabaseUrl,
-    publishableKey: AppConfig.supabasePublishableKey,
-    authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
-  );
-  runApp(const GoRideApp());
+  var backendReady = false;
+  try {
+    await Supabase.initialize(
+      url: AppConfig.supabaseUrl,
+      publishableKey: AppConfig.supabasePublishableKey,
+      authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
+    ).timeout(const Duration(seconds: 8));
+    backendReady = true;
+  } catch (error, stackTrace) {
+    // Keep the app inspectable even if backend setup or storage initialization fails.
+    debugPrint('Go-Ride backend unavailable at launch: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+  runApp(GoRideApp(backendReady: backendReady));
 }
 
 class GoRideApp extends StatelessWidget {
-  const GoRideApp({super.key});
+  const GoRideApp({super.key, required this.backendReady});
+  final bool backendReady;
+
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Go-Ride',
@@ -28,22 +38,185 @@ class GoRideApp extends StatelessWidget {
       scaffoldBackgroundColor: const Color(0xFFF5F7F8),
       inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
     ),
-    home: const AuthGate(),
+    home: AuthGate(backendReady: backendReady),
   );
 }
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+  const AuthGate({super.key, required this.backendReady});
+  final bool backendReady;
+
   @override
-  Widget build(BuildContext context) => StreamBuilder<AuthState>(
-    stream: Supabase.instance.client.auth.onAuthStateChange,
-    builder: (context, snapshot) => Supabase.instance.client.auth.currentSession == null
-      ? const LoginScreen() : const RideHomeScreen(),
+  Widget build(BuildContext context) {
+    if (!backendReady) return const PreviewHomeScreen(backendReady: false);
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) => Supabase.instance.client.auth.currentSession == null
+        ? const PreviewHomeScreen(backendReady: true) : const RideHomeScreen(),
+    );
+  }
+}
+
+
+class PreviewHomeScreen extends StatefulWidget {
+  const PreviewHomeScreen({super.key, required this.backendReady});
+  final bool backendReady;
+
+  @override
+  State<PreviewHomeScreen> createState() => _PreviewHomeScreenState();
+}
+
+class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
+  final pickup = TextEditingController(text: 'Your pickup location');
+  final destination = TextEditingController();
+
+  @override
+  void dispose() {
+    pickup.dispose();
+    destination.dispose();
+    super.dispose();
+  }
+
+  Future<void> previewRide(String category) async {
+    FocusScope.of(context).unfocus();
+    final from = pickup.text.trim().isEmpty ? 'Pickup not set' : pickup.text.trim();
+    final to = destination.text.trim().isEmpty ? 'Choose a destination when you are ready' : destination.text.trim();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('$category · Preview only'),
+        content: Text(
+          'From: $from\\nTo: $to\\n\\nThis is a demo preview. No driver will be requested and no ride or payment will be created. Sign in when you want to use live booking.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Got it')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> openSignIn() async {
+    if (!widget.backendReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Live sign-in is temporarily unavailable. You can still explore the demo.')),
+      );
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => LoginScreen(
+          onSignedIn: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Go-Ride'),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(30)),
+              child: const Text('GUEST PREVIEW', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF087E72))),
+            ),
+          ),
+        ),
+      ],
+    ),
+    body: SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: const Color(0xFF087E72),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.local_taxi_rounded, size: 42, color: Colors.white),
+                SizedBox(height: 14),
+                Text('Your ride, your time.', style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold)),
+                SizedBox(height: 8),
+                Text('Explore Go-Ride before creating an account.', style: TextStyle(color: Colors.white70)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          if (!widget.backendReady)
+            const Message(text: 'Offline preview mode. Live sign-in and ride requests are unavailable right now.'),
+          const Text('Plan your ride', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          TextField(
+            controller: pickup,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Pickup (demo)', prefixIcon: Icon(Icons.my_location)),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: destination,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Where to?', hintText: 'Enter a destination to preview', prefixIcon: Icon(Icons.location_on_outlined)),
+          ),
+          const SizedBox(height: 20),
+          const Text('Choose a ride to preview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.electric_rickshaw, size: 32, color: Color(0xFF087E72)),
+              title: const Text('Auto'),
+              subtitle: const Text('Affordable city trips'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => previewRide('Auto'),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.directions_car_filled, size: 32, color: Color(0xFF087E72)),
+              title: const Text('Mini'),
+              subtitle: const Text('Everyday rides'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => previewRide('Mini'),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.local_taxi, size: 32, color: Color(0xFF087E72)),
+              title: const Text('Sedan'),
+              subtitle: const Text('Extra comfort'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => previewRide('Sedan'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: openSignIn,
+            icon: const Icon(Icons.phone_android),
+            label: const Text('Sign in for live booking'),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'You are browsing as a guest. Preview selections do not create real rides or use your location.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+        ],
+      ),
+    ),
   );
 }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.onSignedIn});
+  final VoidCallback? onSignedIn;
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -75,6 +248,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { busy = true; error = null; });
     try {
       await Supabase.instance.client.auth.verifyOTP(phone: phoneE164, token: otp.text.trim(), type: OtpType.sms);
+      if (mounted) widget.onSignedIn?.call();
     } on AuthException catch (e) { if (mounted) setState(() => error = e.message); }
     catch (_) { if (mounted) setState(() => error = 'Verification failed. Please try again.'); }
     finally { if (mounted) setState(() => busy = false); }

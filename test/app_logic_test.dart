@@ -1,5 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_ride_customer/data/ride_backend.dart';
+import 'package:go_ride_customer/main.dart';
+
 
 void main() {
   test('fare quote parses integer minor units and expiry', () {
@@ -42,5 +45,42 @@ void main() {
   test('currency values are formatted from minor units', () {
     const amountMinor = 12550;
     expect((amountMinor / 100).toStringAsFixed(2), '125.50');
+  });
+}
+
+
+  testWidgets('guest preview opens without sign-in or location permission', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
+    expect(find.text('GUEST PREVIEW'), findsOneWidget);
+    expect(find.text('Plan your ride'), findsOneWidget);
+    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Mini'), findsOneWidget);
+    expect(find.text('Sedan'), findsOneWidget);
+    expect(find.text('Sign in for live booking'), findsOneWidget);
+  });
+
+  testWidgets('guest can inspect demo ride without creating a ride', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
+    await tester.tap(find.text('Auto'));
+    await tester.pumpAndSettle();
+    expect(find.text('Auto · Preview only'), findsOneWidget);
+    expect(find.textContaining('no ride or payment will be created'), findsOneWidget);
+  });
+  testWidgets('guest preview opens without sign-in or location permission', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
+    expect(find.text('GUEST PREVIEW'), findsOneWidget);
+    expect(find.text('Plan your ride'), findsOneWidget);
+    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Mini'), findsOneWidget);
+    expect(find.text('Sedan'), findsOneWidget);
+    expect(find.text('Sign in for live booking'), findsOneWidget);
+  });
+
+  testWidgets('guest can inspect demo ride without creating a ride', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
+    await tester.tap(find.text('Auto'));
+    await tester.pumpAndSettle();
+    expect(find.text('Auto · Preview only'), findsOneWidget);
+    expect(find.textContaining('no ride or payment will be created'), findsOneWidget);
   });
 }
