@@ -102,6 +102,17 @@ jobs:
                   build_file.write_text(source)
           PY
 
+      # firebase_core 2.x can request BuildConfig fields without declaring the
+      # feature itself. Apply the documented AGP compatibility switch on the CI runner.
+      - name: Enable legacy library BuildConfig for AGP 8
+        shell: bash
+        run: |
+          if grep -q '^android.defaults.buildfeatures.buildconfig=' android/gradle.properties; then
+            sed -i 's/^android.defaults.buildfeatures.buildconfig=.*/android.defaults.buildfeatures.buildconfig=true/' android/gradle.properties
+          else
+            printf '\\nandroid.defaults.buildfeatures.buildconfig=true\\n' >> android/gradle.properties
+          fi
+
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed --line-length=120 $(find lib test -name "*.dart" -not -name "*.mocks.dart")
 
