@@ -234,7 +234,7 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Go-Ride'), actions: [IconButton(tooltip: 'Sign out', onPressed: signOut, icon: const Icon(Icons.logout))]),
-    body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
+    body: SafeArea(child: RefreshIndicator(onRefresh: () async { if (ride != null) { await refreshRide(ride!.id); } else { await locate(); } }, child: ListView(physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.all(16), children: [
       Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFF087E72), borderRadius: BorderRadius.circular(22)),
         child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Your ride, your time.', style: TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.bold)),
@@ -273,7 +273,7 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
       ],
       const SizedBox(height: 18),
       const Text('Location is used to set your pickup and estimate the trip. Permission is requested only when needed.', style: TextStyle(color: Colors.black54, fontSize: 12)),
-    ])),
+    ]))),
   );
 
   String statusLabel(String status) => switch (status) {
