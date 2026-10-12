@@ -10,6 +10,7 @@ import 'package:motis_mitfahr_app/trips/pages/recurring_drive_edit_page.dart';
 import 'package:motis_mitfahr_app/trips/util/recurrence/edit_recurrence_options.dart';
 import 'package:motis_mitfahr_app/trips/util/recurrence/recurrence.dart';
 import 'package:motis_mitfahr_app/trips/util/recurrence/week_day.dart';
+import 'package:motis_mitfahr_app/util/extensions/time_of_day_extension.dart';
 import 'package:rrule/rrule.dart';
 
 import '../../test_util/factories/recurring_drive_factory.dart';
