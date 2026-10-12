@@ -70,6 +70,22 @@ jobs:
                   )
                   if count:
                       print("Patched namespace: app_links -> com.llfbandit.app_links")
+              # firebase_core 2.x may declare generated BuildConfig values through
+              # its Flutter/Firebase Gradle setup rather than a literal buildConfigField.
+              # Enable the AGP 8 feature explicitly in this module on the ephemeral runner.
+              if build_file.parent.parent.name.startswith("firebase_core") and not re.search(
+                  r"buildFeatures\s*\{[^}]*\bbuildConfig\s+true", source, re.DOTALL
+              ):
+                  source, count = re.subn(
+                      r"(^\s*android\s*\{\s*$)",
+                      lambda item: item.group(1) + "\n    buildFeatures {\n        buildConfig true\n    }",
+                      source,
+                      count=1,
+                      flags=re.MULTILINE,
+                  )
+                  if count:
+                      print(f"Enabled BuildConfig for: {build_file.parent.parent.name}")
+
               if re.search(r"\bbuildConfigField\b", source) and not re.search(
                   r"buildFeatures\s*\{[^}]*\bbuildConfig\s+true", source, re.DOTALL
               ):
