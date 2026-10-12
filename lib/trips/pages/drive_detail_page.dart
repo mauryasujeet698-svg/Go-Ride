@@ -1,7 +1,7 @@
 import 'package:badges/badges.dart' as badges;
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import 'package:timelines/timelines.dart';
+import 'package:timelines_upgraded/timelines_upgraded.dart';
 
 import '../../account/models/profile.dart';
 import '../../account/widgets/profile_widget.dart';

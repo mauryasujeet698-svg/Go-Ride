@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:timelines/timelines.dart';
+import 'package:timelines_upgraded/timelines_upgraded.dart';
 
 // We need to write this custom class to define our timeline theme and use the "of" method naturally.
 // ignore: avoid_classes_with_only_static_members

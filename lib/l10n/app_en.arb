@@ -114,11 +114,11 @@
   "pageHomeTitle": "Home",
 
   "pageAboutTitle": "About",
-  "pageAboutLogoSemantics": "MOTIS Logo",
+  "pageAboutLogoSemantics": "Go Ride logo",
   "pageAboutVersion": "Version {version}",
   "pageAboutBuildNumber": "Build number: {number}",
   "pageAboutBuildSignature": "Build signature: {signature}",
-  "pageAboutText": "This app was coded by a group of students at TU Darmstadt.\nLicensed under the MIT License.",
+  "pageAboutText": "Go Ride helps people find and share rides.",
   "pageAboutGithub": "GitHub",
   "pageAboutWebsite": "Website",
   "pageAboutTermsOfService": "Terms of service",
@@ -138,7 +138,7 @@
   "pageProfileUpdateProfilePictureFromGallery": "From Gallery",
   "pageProfileUpdateProfilePictureDelete": "Delete",
   "pageProfileUpdateProfilePicturePermissionTitle": "Permission required",
-  "pageProfileUpdateProfilePicturePermissionMessage": "MOTIS requires access to your gallery to upload a profile picture.",
+  "pageProfileUpdateProfilePicturePermissionMessage": "Go Ride needs access to your gallery to upload a profile picture.",
   "pageProfileUpdateProfilePicturePermissionToSettings": "To Settings",
   "pageProfileDescriptionTitle": "Description",
   "pageProfileDescriptionEmpty": "No description",
@@ -181,8 +181,8 @@
   "pageHelpTitle": "Help",
   "pageHelpContactUs": "Contact Us",
   "pageHelpEmailSubject": "Inquiry by User-ID [{id}]",
-  "pageHelpQuestion1": "What is MOTIS?",
-  "pageHelpAnswer1": "MOTIS encompasses many tools to support intermodal routing. Its goal is to help plan journeys that include public transport, bike sharing, ride sharing and more modes of transportation.",
+  "pageHelpQuestion1": "What is Go Ride?",
+  "pageHelpAnswer1": "Go Ride helps people find and share rides with other people.",
   "pageHelpQuestion2": "How much do rides cost? How can I pay?",
   "pageHelpAnswer2": "We designed the payment process to fully rely on user agreements. Both the cost and payment method of a ride can be negotiated in person or in our in-app chat. You will see a price suggestion for most rides as a starting point.",
   "pageHelpQuestion3": "We agreed on a price, but now my rider isn't paying it. What can I do?",
@@ -459,5 +459,5 @@
   "widgetTripOverviewSinceDate": "Since {date}",
   "widgetTripOverviewFromDate": "Starting from {date}",
 
-  "appName": "Motis Ride-Sharing App"
+  "appName": "Go Ride"
   }

@@ -1,11 +1,11 @@
 {
-    "name": "motis_mitfahr_app",
-    "short_name": "motis_mitfahr_app",
+    "name": "Go Ride",
+    "short_name": "Go Ride",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Go Ride helps people find and share rides.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
