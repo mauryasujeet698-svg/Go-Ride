@@ -1,5 +1,5 @@
 name: motis_mitfahr_app
-description: A ride-sharing app by the Motis team.
+description: Go Ride ride-sharing app.
 
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.

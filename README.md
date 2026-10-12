@@ -1,6 +1,6 @@
-# Motis Mitfahr-App
+# Go Ride
 
-A ride-sharing app by the Motis team.
+Go Ride is a ride-sharing app built on the MOTIS open-source project. The original project is licensed under the MIT License.
 
 ## Getting Started
 
@@ -12,7 +12,7 @@ A ride-sharing app by the Motis team.
 ### Installing
 
 - Clone the repository
-- Insert the environment variables in `.env`, following the `example.env` file. You can find the supabase url and key in the supabase project settings (use the `anon` key for the `SUPABASE_KEY` variable)
+- Create `.env` from `example.env` and set `SUPABASE_BASE_URL` and `SUPABASE_BASE_KEY` using the project URL and public anon key from Supabase. Never put a service-role key in the client app.
 - Run `flutter pub get` to install all dependencies
 
 ## Local Development
