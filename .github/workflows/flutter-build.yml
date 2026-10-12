@@ -42,18 +42,18 @@ jobs:
           root = pathlib.Path(os.environ["PUB_CACHE"]) / "hosted" / "pub.dev"
           for build_file in root.glob("*/android/build.gradle"):
               source = build_file.read_text()
-              if re.search(r"^\\s*namespace\\s", source, re.MULTILINE):
+              if re.search(r"^\s*namespace\s", source, re.MULTILINE):
                   continue
               manifest = build_file.parent / "src" / "main" / "AndroidManifest.xml"
               if not manifest.exists():
                   continue
-              match = re.search(r"""\\bpackage\\s*=\\s*["']([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)+)["']""", manifest.read_text())
+              match = re.search(r"""\bpackage\s*=\s*["']([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)["']""", manifest.read_text())
               if not match:
                   continue
               namespace = match.group(1)
               updated, count = re.subn(
-                  r"(^\\s*android\\s*\\{\\s*$)",
-                  lambda item: item.group(1) + "\\n    namespace '" + namespace + "'",
+                  r"(^\s*android\s*\{\s*$)",
+                  lambda item: item.group(1) + "\n    namespace '" + namespace + "'",
                   source,
                   count=1,
                   flags=re.MULTILINE,
