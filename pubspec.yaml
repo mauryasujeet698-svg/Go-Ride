@@ -71,7 +71,7 @@ dependencies:
   url_launcher: ^6.1.8
   package_info_plus: ^3.0.3
   permission_handler: ^10.2.0
-  image_picker: ^0.8.6
+  image_picker: ^1.2.4
   faker: ^2.1.0
   deep_pick: ^0.10.0
   sliver_tools: ^0.2.12
