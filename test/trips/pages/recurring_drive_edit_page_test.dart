@@ -10,7 +10,6 @@ import 'package:motis_mitfahr_app/trips/pages/recurring_drive_edit_page.dart';
 import 'package:motis_mitfahr_app/trips/util/recurrence/edit_recurrence_options.dart';
 import 'package:motis_mitfahr_app/trips/util/recurrence/recurrence.dart';
 import 'package:motis_mitfahr_app/trips/util/recurrence/week_day.dart';
-import 'package:motis_mitfahr_app/util/extensions/time_of_day_extension.dart';
 import 'package:rrule/rrule.dart';
 
 import '../../test_util/factories/recurring_drive_factory.dart';
@@ -275,7 +274,7 @@ void main() {
           recurrenceRule: RecurrenceRule(
               frequency: Frequency.weekly,
               interval: oldIntervalSize,
-              byWeekDays: oldWeekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toSet(),
+              byWeekDays: oldWeekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toList(),
               until: oldUntilTime),
           recurrenceEndType: RecurrenceEndType.date,
         );
@@ -283,7 +282,7 @@ void main() {
         final RecurrenceRule newRecurrenceRule = RecurrenceRule(
             frequency: Frequency.weekly,
             interval: newIntervalSize,
-            byWeekDays: newWeekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toSet(),
+            byWeekDays: newWeekdays.map((WeekDay weekDay) => weekDay.toByWeekDayEntry()).toList(),
             until: newUntilTime);
 
         whenRequest(processor).thenReturnJson(recurringDrive.toJsonForApi());
