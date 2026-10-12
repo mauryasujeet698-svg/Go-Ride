@@ -86,7 +86,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
       builder: (dialogContext) => AlertDialog(
         title: Text('$category · Preview only'),
         content: Text(
-          'From: $from\\nTo: $to\\n\\nThis is a demo preview. No driver will be requested and no ride or payment will be created. Sign in when you want to use live booking.',
+          'From: $from\nTo: $to\n\nThis is a demo preview. No driver will be requested and no ride or payment will be created. Sign in when you want to use live booking.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Got it')),
