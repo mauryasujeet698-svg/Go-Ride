@@ -215,7 +215,21 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
   Widget build(BuildContext context) {
     final center = pickupPoint != null ? ll.LatLng(pickupPoint!.latitude,pickupPoint!.longitude) : const ll.LatLng(20.5937,78.9629);
     return Scaffold(
-      appBar: AppBar(title: const Text('Go-Ride'), actions: [Padding(padding: const EdgeInsets.only(right:12), child: Center(child: Container(padding: const EdgeInsets.symmetric(horizontal:10,vertical:6), decoration: BoxDecoration(color:Colors.teal.shade50,borderRadius:BorderRadius.circular(30)), child: const Text('EXPLORE',style:TextStyle(fontSize:10,fontWeight:FontWeight.bold,color:Color(0xFF087E72)))))]),
+      appBar: AppBar(
+        title: const Text('Go-Ride'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(30)),
+                child: const Text('EXPLORE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF087E72))),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
         const Text('Where would you like to go?',style:TextStyle(fontSize:23,fontWeight:FontWeight.bold)),
         const SizedBox(height:6),
