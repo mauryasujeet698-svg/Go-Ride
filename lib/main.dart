@@ -510,12 +510,33 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
     finally { if (mounted) setState(() => busy = false); }
   }
 
+  void openCustomerSection(String section) {
+    Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (_) => CustomerSectionScreen(section: section),
+    ));
+  }
+
   bool get isActive => ride != null && !['completed', 'cancelled', 'failed'].contains(ride!.status);
   Future<void> signOut() => Supabase.instance.client.auth.signOut();
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Go-Ride'), actions: [IconButton(tooltip: 'Sign out', onPressed: signOut, icon: const Icon(Icons.logout))]),
+    appBar: AppBar(
+      title: const Text('Go-Ride'),
+      actions: [
+        PopupMenuButton<String>(
+          tooltip: 'Account and trips',
+          onSelected: openCustomerSection,
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'history', child: ListTile(leading: Icon(Icons.history), title: Text('Ride history'), contentPadding: EdgeInsets.zero)),
+            PopupMenuItem(value: 'saved', child: ListTile(leading: Icon(Icons.bookmark_outline), title: Text('Saved places'), contentPadding: EdgeInsets.zero)),
+            PopupMenuItem(value: 'support', child: ListTile(leading: Icon(Icons.support_agent), title: Text('Customer support'), contentPadding: EdgeInsets.zero)),
+            PopupMenuItem(value: 'profile', child: ListTile(leading: Icon(Icons.person_outline), title: Text('My profile'), contentPadding: EdgeInsets.zero)),
+          ],
+        ),
+        IconButton(tooltip: 'Sign out', onPressed: signOut, icon: const Icon(Icons.logout)),
+      ],
+    ),
     body: SafeArea(child: RefreshIndicator(onRefresh: () async { if (ride != null) { await refreshRide(ride!.id); } else { await locate(); } }, child: ListView(physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.all(16), children: [
       Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFF087E72), borderRadius: BorderRadius.circular(22)),
         child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -568,6 +589,140 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
   IconData categoryIcon(String category) => switch (category.toUpperCase()) {
     'AUTO' => Icons.electric_rickshaw, 'MINI' => Icons.directions_car_filled, 'SEDAN' => Icons.local_taxi, _ => Icons.directions_car,
   };
+}
+
+class CustomerSectionScreen extends StatefulWidget {
+  const CustomerSectionScreen({super.key, required this.section});
+  final String section;
+  @override
+  State<CustomerSectionScreen> createState() => _CustomerSectionScreenState();
+}
+
+class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
+  bool loading = true, saving = false;
+  String? error, notice;
+  List<Map<String, dynamic>> rows = [];
+  final subject = TextEditingController();
+  final message = TextEditingController();
+
+  SupabaseClient get client => Supabase.instance.client;
+  String get title => switch (widget.section) {
+    'history' => 'Ride history', 'saved' => 'Saved places', 'support' => 'Customer support', _ => 'My profile',
+  };
+
+  @override
+  void initState() { super.initState(); load(); }
+  @override
+  void dispose() { subject.dispose(); message.dispose(); super.dispose(); }
+
+  Future<void> load() async {
+    setState(() { loading = true; error = null; });
+    try {
+      final user = client.auth.currentUser;
+      if (user == null) throw Exception('Please sign in to view this section.');
+      dynamic result;
+      if (widget.section == 'history') {
+        result = await client.from('rides').select('id,status,category,fare_minor,currency,pickup_label,destination_label,created_at').eq('customer_id', user.id).order('created_at', ascending: false).limit(50);
+      } else if (widget.section == 'saved') {
+        result = await client.from('saved_places').select('id,label,address,latitude,longitude,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(100);
+      } else if (widget.section == 'support') {
+        result = await client.from('support_tickets').select('id,subject,message,status,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(50);
+      } else {
+        result = await client.from('profiles').select('full_name,phone,avatar_url,created_at').eq('id', user.id).maybeSingle();
+      }
+      if (!mounted) return;
+      setState(() { rows = result is List ? result.map((e) => Map<String,dynamic>.from(e as Map)).toList() : (result is Map<String,dynamic> ? [result] : []); });
+    } catch (_) { if (mounted) setState(() => error = 'Could not load this section. Check your connection and account permissions.'); }
+    finally { if (mounted) setState(() => loading = false); }
+  }
+
+  Future<void> addSavedPlace() async {
+    final labelController = TextEditingController();
+    final addressController = TextEditingController();
+    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Save a place'),
+      content: SingleChildScrollView(child: Column(mainAxisSize:MainAxisSize.min,children:[
+        TextField(controller:labelController,decoration:const InputDecoration(labelText:'Label',hintText:'Home, Work…')),
+        const SizedBox(height:10),
+        TextField(controller:addressController,decoration:const InputDecoration(labelText:'Address'),maxLines:2),
+      ])),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Save'))],
+    ));
+    if (ok != true) { labelController.dispose(); addressController.dispose(); return; }
+    try {
+      final label=labelController.text.trim(), address=addressController.text.trim();
+      if(label.isEmpty || address.isEmpty) throw Exception('Enter a label and address.');
+      final matches=await locationFromAddress(address);
+      if(matches.isEmpty) throw Exception('Address could not be located.');
+      final user=client.auth.currentUser!;
+      await client.from('saved_places').insert({'user_id':user.id,'label':label,'address':address,'latitude':matches.first.latitude,'longitude':matches.first.longitude});
+      if(mounted) { setState(()=>notice='Place saved.'); await load(); }
+    } catch (_) { if(mounted) setState(()=>error='Could not save that place. Check the address and try again.'); }
+    finally { labelController.dispose(); addressController.dispose(); }
+  }
+
+  Future<void> deleteSavedPlace(String id) async {
+    try {
+      await client.from('saved_places').delete().eq('id',id).eq('user_id',client.auth.currentUser!.id);
+      if(mounted) { setState(()=>notice='Saved place removed.'); await load(); }
+    } catch (_) { if(mounted) setState(()=>error='Could not remove this saved place.'); }
+  }
+
+  Future<void> createTicket() async {
+    final s=subject.text.trim(), m=message.text.trim();
+    if(s.isEmpty || m.isEmpty) { setState(()=>error='Enter a subject and describe the issue.'); return; }
+    setState(()=>saving=true);
+    try {
+      await client.from('support_tickets').insert({'user_id':client.auth.currentUser!.id,'subject':s,'message':m});
+      subject.clear(); message.clear();
+      if(mounted) { setState(()=>notice='Support request submitted.'); await load(); }
+    } catch (_) { if(mounted) setState(()=>error='Support request could not be submitted. Please try again.'); }
+    finally { if(mounted) setState(()=>saving=false); }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar:AppBar(title:Text(title),actions:[IconButton(onPressed:load,tooltip:'Refresh',icon:const Icon(Icons.refresh))]),
+    floatingActionButton:widget.section=='saved'?FloatingActionButton.extended(onPressed:addSavedPlace,icon:const Icon(Icons.add_location_alt),label:const Text('Add place')):null,
+    body:SafeArea(child:loading?const Center(child:CircularProgressIndicator()):RefreshIndicator(onRefresh:load,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(16),children:[
+      if(error!=null) Message(text:error!,isError:true),
+      if(notice!=null) Message(text:notice!),
+      if(widget.section=='support') ...[
+        const Text('Need help?',style:TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
+        const SizedBox(height:8),
+        TextField(controller:subject,decoration:const InputDecoration(labelText:'Subject')),
+        const SizedBox(height:10),
+        TextField(controller:message,decoration:const InputDecoration(labelText:'Describe your issue'),minLines:3,maxLines:6),
+        const SizedBox(height:10),
+        FilledButton.icon(onPressed:saving?null:createTicket,icon:const Icon(Icons.send),label:Text(saving?'Submitting…':'Submit support request')),
+        const Divider(height:32),
+        const Text('Your requests',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
+      ],
+      if(widget.section=='profile') ...[
+        ListTile(leading:const Icon(Icons.person_outline),title:Text(rows.isNotEmpty && (rows.first['full_name']?.toString().isNotEmpty??false)?rows.first['full_name'].toString():'Go-Ride customer'),subtitle:Text(client.auth.currentUser?.email ?? client.auth.currentUser?.phone ?? 'Signed-in account')),
+        ListTile(leading:const Icon(Icons.verified_user_outlined),title:const Text('Account authentication'),subtitle:Text(client.auth.currentUser?.appMetadata['provider']?.toString() ?? 'Supabase Auth')),
+        const Padding(padding:EdgeInsets.all(12),child:Text('Profile editing and account deletion require a dedicated verified workflow; no destructive account action is exposed here.')),
+      ],
+      if(rows.isEmpty && widget.section!='profile') const Padding(padding:EdgeInsets.symmetric(vertical:32),child:Column(children:[Icon(Icons.inbox_outlined,size:48,color:Colors.black38),SizedBox(height:8),Text('Nothing here yet.')])),
+      for(final row in rows) if(widget.section=='history') Card(child:ListTile(
+        leading:const Icon(Icons.local_taxi,color:Color(0xFF087E72)),
+        title:Text('${row['category'] ?? 'Ride'} · ${row['status'] ?? 'unknown'}'),
+        subtitle:Text('${row['pickup_label'] ?? 'Pickup'} → ${row['destination_label'] ?? 'Destination'}\n${row['created_at'] ?? ''}',maxLines:3,overflow:TextOverflow.ellipsis),
+        trailing:Text('${row['currency'] ?? 'INR'} ${(((row['fare_minor'] as num?)?.toInt() ?? 0)/100).toStringAsFixed(0)}'),
+      )),
+      for(final row in rows) if(widget.section=='saved') Card(child:ListTile(
+        leading:const Icon(Icons.bookmark_outline,color:Color(0xFF087E72)),
+        title:Text(row['label']?.toString() ?? 'Saved place'),
+        subtitle:Text(row['address']?.toString() ?? ''),
+        trailing:IconButton(tooltip:'Delete saved place',onPressed:()=>deleteSavedPlace(row['id'].toString()),icon:const Icon(Icons.delete_outline)),
+      )),
+      for(final row in rows) if(widget.section=='support') Card(child:ListTile(
+        leading:const Icon(Icons.support_agent,color:Color(0xFF087E72)),
+        title:Text(row['subject']?.toString() ?? 'Support request'),
+        subtitle:Text('${row['message'] ?? ''}\nStatus: ${row['status'] ?? 'open'}',maxLines:4,overflow:TextOverflow.ellipsis),
+      )),
+    ]))),
+  );
 }
 
 class Message extends StatelessWidget {
