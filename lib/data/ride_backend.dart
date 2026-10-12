@@ -58,13 +58,14 @@ class RideBackend {
   final Map<String, String> _createKeys = <String, String>{};
 
   Future<List<FareQuote>> estimate(GeoPoint pickup, GeoPoint destination) async {
-    final data = await client.rpc('estimate_fares', params: {
-      'p_pickup_lat': pickup.latitude,
-      'p_pickup_lng': pickup.longitude,
-      'p_destination_lat': destination.latitude,
-      'p_destination_lng': destination.longitude,
+    final response = await client.functions.invoke('estimate-route-fares', body: {
+      'pickup': {'latitude': pickup.latitude, 'longitude': pickup.longitude},
+      'destination': {'latitude': destination.latitude, 'longitude': destination.longitude},
     });
-    return (data as List).map((e) => FareQuote.fromMap(Map<String, dynamic>.from(e as Map))).toList();
+    final payload = Map<String, dynamic>.from(response.data as Map);
+    final data = payload['fares'];
+    if (data is! List) throw const FormatException('Fare service returned an invalid response.');
+    return data.map((e) => FareQuote.fromMap(Map<String, dynamic>.from(e as Map))).toList();
   }
 
   Future<RideRecord> createRide({required FareQuote quote, required String pickupLabel, required String destinationLabel}) async {

@@ -1,11 +1,11 @@
 # Guest map and authentication setup
 
-This build uses Flutter Map with OpenStreetMap tiles, OSRM-compatible routing and Nominatim-compatible address search. Endpoint values can be overridden with --dart-define=OSM_TILE_URL=..., --dart-define=ROUTING_URL=..., and --dart-define=GEOCODER_URL=....
+Flutter Map displays OpenStreetMap tiles. The customer map uses OSRM-compatible routing and Nominatim-compatible search. Endpoints can be overridden with --dart-define=OSM_TILE_URL=..., --dart-define=ROUTING_URL=..., and --dart-define=GEOCODER_URL=....
 
-Public OSM tile and Nominatim endpoints have usage policies and rate limits; they are development defaults, not a service-level guarantee for production traffic. Before public launch, select appropriate providers or host compliant services, configure quotas and monitoring, and set the endpoint defines.
+Public OSM tile and Nominatim endpoints have usage policies and rate limits; they are development defaults, not a service-level guarantee for production traffic. Select an appropriate provider or host compliant services before public launch.
 
-Guest fare estimates are read-only, do not create a ride quote, and are calculated from configured database pricing rules using road distance returned by routing. When the user signs in, the authenticated booking screen requests a fresh quote before the user can confirm a real ride.
+The estimate-route-fares Supabase Edge Function calculates the road route server-side. Guest calls return read-only estimates. Authenticated calls create short-lived customer-owned fare quotes using a service-role-only RPC; the service-role key is never shipped in the app. Quote creation is rate-limited per user.
 
-Google OAuth must be enabled in Supabase Auth and configured with the correct Google OAuth client, redirect URL and Android app signing fingerprints. The app redirect URI is io.supabase.goride://login-callback/; register the matching redirect in Supabase Auth URL configuration. Phone OTP still requires a configured SMS provider and abuse limits.
+Google OAuth must be enabled in Supabase Auth and configured with the Google OAuth client and redirect URI io.supabase.goride://login-callback/. Register the matching redirect in Supabase Auth URL configuration and configure Android signing fingerprints. Phone OTP still requires a configured SMS provider and abuse limits.
 
-Driver matching, driver GPS ingestion, assignment, live tracking, notifications and completed-trip lifecycle are not considered complete merely because the customer UI is present. They require an operational driver application or dispatch service and end-to-end tests.
+Driver matching, driver GPS ingestion, assignment, live tracking, notifications and completed-trip lifecycle still require an operational driver application or dispatch service and end-to-end tests.
