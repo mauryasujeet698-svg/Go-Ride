@@ -222,6 +222,10 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
             tooltip: 'Explore Go-Ride',
             onSelected: (section) {
               if (section == 'signin') {
+                if (!widget.backendReady) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign-in is temporarily unavailable because backend configuration is missing.')));
+                  return;
+                }
                 Navigator.of(context).push<void>(MaterialPageRoute<void>(
                   builder: (_) => LoginScreen(onSignedIn: () => Navigator.of(context).pop()),
                 ));
@@ -660,7 +664,7 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
   }
 
   Future<void> addSavedPlace() async {
-    if (client.auth.currentUser == null) {
+    if (!widget.backendReady || client.auth.currentUser == null) {
       await requireSignIn();
       return;
     }
@@ -696,7 +700,7 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
   }
 
   Future<void> createTicket() async {
-    if (client.auth.currentUser == null) {
+    if (!widget.backendReady || client.auth.currentUser == null) {
       await requireSignIn();
       return;
     }
@@ -762,7 +766,7 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
       ],
       if(widget.section=='profile') ...[
         ListTile(leading:const Icon(Icons.person_outline),title:Text(rows.isNotEmpty && (rows.first['full_name']?.toString().isNotEmpty??false)?rows.first['full_name'].toString():'Go-Ride customer'),subtitle:Text(isGuest ? 'Guest preview · no account connected' : (client.auth.currentUser?.email ?? client.auth.currentUser?.phone ?? 'Signed-in account'))),
-        ListTile(leading:const Icon(Icons.verified_user_outlined),title:const Text('Account authentication'),subtitle:Text(client.auth.currentUser?.appMetadata['provider']?.toString() ?? 'Supabase Auth')),
+        ListTile(leading:const Icon(Icons.verified_user_outlined),title:const Text('Account authentication'),subtitle:Text(isGuest ? 'Sign in to view account authentication details' : (client.auth.currentUser?.appMetadata['provider']?.toString() ?? 'Supabase Auth'))),
         const Padding(padding:EdgeInsets.all(12),child:Text('Profile editing and account deletion require a dedicated verified workflow; no destructive account action is exposed here.')),
       ],
       if(rows.isEmpty && widget.section!='profile') Padding(padding:const EdgeInsets.symmetric(vertical:32),child:Column(children:[
