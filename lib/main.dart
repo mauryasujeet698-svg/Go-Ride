@@ -227,7 +227,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                 ));
               } else {
                 Navigator.of(context).push<void>(MaterialPageRoute<void>(
-                  builder: (_) => CustomerSectionScreen(section: section),
+                  builder: (_) => CustomerSectionScreen(section: section, backendReady: widget.backendReady),
                 ));
               }
             },
@@ -604,8 +604,9 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
 }
 
 class CustomerSectionScreen extends StatefulWidget {
-  const CustomerSectionScreen({super.key, required this.section});
+  const CustomerSectionScreen({super.key, required this.section, this.backendReady = true});
   final String section;
+  final bool backendReady;
   @override
   State<CustomerSectionScreen> createState() => _CustomerSectionScreenState();
 }
@@ -618,6 +619,7 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
   final message = TextEditingController();
 
   SupabaseClient get client => Supabase.instance.client;
+  bool get isGuest => !widget.backendReady || client.auth.currentUser == null;
   String get title => switch (widget.section) {
     'history' => 'Ride history', 'saved' => 'Saved places', 'support' => 'Customer support', _ => 'My profile',
   };
@@ -630,6 +632,10 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
   Future<void> load() async {
     setState(() { loading = true; error = null; });
     try {
+      if (!widget.backendReady) {
+        if (mounted) setState(() => rows = []);
+        return;
+      }
       final user = client.auth.currentUser;
       // Guests can explore every section. Private account data is only queried
       // after authentication; guest screens show honest empty/preview states.
@@ -706,6 +712,10 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
   }
 
   Future<void> requireSignIn() async {
+    if (!widget.backendReady) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign-in is temporarily unavailable because backend configuration is missing.')));
+      return;
+    }
     await Navigator.of(context).push<void>(MaterialPageRoute<void>(
       builder: (_) => LoginScreen(onSignedIn: () => Navigator.of(context).pop()),
     ));
@@ -717,7 +727,7 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
     appBar:AppBar(title:Text(title),actions:[IconButton(onPressed:load,tooltip:'Refresh',icon:const Icon(Icons.refresh))]),
     floatingActionButton:widget.section=='saved'?FloatingActionButton.extended(onPressed:addSavedPlace,icon:const Icon(Icons.add_location_alt),label:const Text('Add place')):null,
     body:SafeArea(child:loading?const Center(child:CircularProgressIndicator()):RefreshIndicator(onRefresh:load,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(16),children:[
-      if (client.auth.currentUser == null) Card(
+      if (isGuest) Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -751,14 +761,14 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
         const Text('Your requests',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
       ],
       if(widget.section=='profile') ...[
-        ListTile(leading:const Icon(Icons.person_outline),title:Text(rows.isNotEmpty && (rows.first['full_name']?.toString().isNotEmpty??false)?rows.first['full_name'].toString():'Go-Ride customer'),subtitle:Text(client.auth.currentUser == null ? 'Guest preview · no account connected' : (client.auth.currentUser?.email ?? client.auth.currentUser?.phone ?? 'Signed-in account'))),
+        ListTile(leading:const Icon(Icons.person_outline),title:Text(rows.isNotEmpty && (rows.first['full_name']?.toString().isNotEmpty??false)?rows.first['full_name'].toString():'Go-Ride customer'),subtitle:Text(isGuest ? 'Guest preview · no account connected' : (client.auth.currentUser?.email ?? client.auth.currentUser?.phone ?? 'Signed-in account'))),
         ListTile(leading:const Icon(Icons.verified_user_outlined),title:const Text('Account authentication'),subtitle:Text(client.auth.currentUser?.appMetadata['provider']?.toString() ?? 'Supabase Auth')),
         const Padding(padding:EdgeInsets.all(12),child:Text('Profile editing and account deletion require a dedicated verified workflow; no destructive account action is exposed here.')),
       ],
       if(rows.isEmpty && widget.section!='profile') Padding(padding:const EdgeInsets.symmetric(vertical:32),child:Column(children:[
         const Icon(Icons.inbox_outlined,size:48,color:Colors.black38),
         const SizedBox(height:8),
-        Text(client.auth.currentUser == null
+        Text(isGuest
           ? (widget.section == 'history' ? 'Your rides will appear here after you sign in and book.' : widget.section == 'saved' ? 'Sign in to save and manage your places.' : 'Sign in to view and submit your support requests.')
           : 'Nothing here yet.'),
       ])),
