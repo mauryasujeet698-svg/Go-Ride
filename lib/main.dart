@@ -218,15 +218,27 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
       appBar: AppBar(
         title: const Text('Go-Ride'),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(30)),
-                child: const Text('EXPLORE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF087E72))),
-              ),
-            ),
+          PopupMenuButton<String>(
+            tooltip: 'Explore Go-Ride',
+            onSelected: (section) {
+              if (section == 'signin') {
+                Navigator.of(context).push<void>(MaterialPageRoute<void>(
+                  builder: (_) => LoginScreen(onSignedIn: () => Navigator.of(context).pop()),
+                ));
+              } else {
+                Navigator.of(context).push<void>(MaterialPageRoute<void>(
+                  builder: (_) => CustomerSectionScreen(section: section),
+                ));
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'history', child: ListTile(leading: Icon(Icons.history), title: Text('Ride history'), contentPadding: EdgeInsets.zero)),
+              PopupMenuItem(value: 'saved', child: ListTile(leading: Icon(Icons.bookmark_outline), title: Text('Saved places'), contentPadding: EdgeInsets.zero)),
+              PopupMenuItem(value: 'support', child: ListTile(leading: Icon(Icons.support_agent), title: Text('Customer support'), contentPadding: EdgeInsets.zero)),
+              PopupMenuItem(value: 'profile', child: ListTile(leading: Icon(Icons.person_outline), title: Text('My profile'), contentPadding: EdgeInsets.zero)),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'signin', child: ListTile(leading: Icon(Icons.login), title: Text('Sign in to book'), contentPadding: EdgeInsets.zero)),
+            ],
           ),
         ],
       ),
@@ -619,7 +631,12 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
     setState(() { loading = true; error = null; });
     try {
       final user = client.auth.currentUser;
-      if (user == null) throw Exception('Please sign in to view this section.');
+      // Guests can explore every section. Private account data is only queried
+      // after authentication; guest screens show honest empty/preview states.
+      if (user == null) {
+        if (mounted) setState(() => rows = []);
+        return;
+      }
       dynamic result;
       if (widget.section == 'history') {
         result = await client.from('rides').select('id,status,category,fare_minor,currency,pickup_label,destination_label,created_at').eq('customer_id', user.id).order('created_at', ascending: false).limit(50);
@@ -637,6 +654,10 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
   }
 
   Future<void> addSavedPlace() async {
+    if (client.auth.currentUser == null) {
+      await requireSignIn();
+      return;
+    }
     final labelController = TextEditingController();
     final addressController = TextEditingController();
     final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
@@ -669,6 +690,10 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
   }
 
   Future<void> createTicket() async {
+    if (client.auth.currentUser == null) {
+      await requireSignIn();
+      return;
+    }
     final s=subject.text.trim(), m=message.text.trim();
     if(s.isEmpty || m.isEmpty) { setState(()=>error='Enter a subject and describe the issue.'); return; }
     setState(()=>saving=true);
@@ -680,11 +705,38 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
     finally { if(mounted) setState(()=>saving=false); }
   }
 
+  Future<void> requireSignIn() async {
+    await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (_) => LoginScreen(onSignedIn: () => Navigator.of(context).pop()),
+    ));
+    if (mounted && client.auth.currentUser != null) await load();
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar:AppBar(title:Text(title),actions:[IconButton(onPressed:load,tooltip:'Refresh',icon:const Icon(Icons.refresh))]),
     floatingActionButton:widget.section=='saved'?FloatingActionButton.extended(onPressed:addSavedPlace,icon:const Icon(Icons.add_location_alt),label:const Text('Add place')):null,
     body:SafeArea(child:loading?const Center(child:CircularProgressIndicator()):RefreshIndicator(onRefresh:load,child:ListView(physics:const AlwaysScrollableScrollPhysics(),padding:const EdgeInsets.all(16),children:[
+      if (client.auth.currentUser == null) Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [
+              Icon(Icons.visibility_outlined, color: Color(0xFF087E72)),
+              SizedBox(width: 8),
+              Expanded(child: Text('Guest preview', style: TextStyle(fontWeight: FontWeight.bold))),
+            ]),
+            const SizedBox(height: 8),
+            const Text('You can explore this screen without an account. Sign in is only needed for personal data or actions that save information.'),
+            const SizedBox(height: 10),
+            Align(alignment: Alignment.centerLeft, child: FilledButton.tonalIcon(
+              onPressed: requireSignIn,
+              icon: const Icon(Icons.login),
+              label: const Text('Sign in'),
+            )),
+          ]),
+        ),
+      ),
       if(error!=null) Message(text:error!,isError:true),
       if(notice!=null) Message(text:notice!),
       if(widget.section=='support') ...[
@@ -699,11 +751,17 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
         const Text('Your requests',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
       ],
       if(widget.section=='profile') ...[
-        ListTile(leading:const Icon(Icons.person_outline),title:Text(rows.isNotEmpty && (rows.first['full_name']?.toString().isNotEmpty??false)?rows.first['full_name'].toString():'Go-Ride customer'),subtitle:Text(client.auth.currentUser?.email ?? client.auth.currentUser?.phone ?? 'Signed-in account')),
+        ListTile(leading:const Icon(Icons.person_outline),title:Text(rows.isNotEmpty && (rows.first['full_name']?.toString().isNotEmpty??false)?rows.first['full_name'].toString():'Go-Ride customer'),subtitle:Text(client.auth.currentUser == null ? 'Guest preview · no account connected' : (client.auth.currentUser?.email ?? client.auth.currentUser?.phone ?? 'Signed-in account'))),
         ListTile(leading:const Icon(Icons.verified_user_outlined),title:const Text('Account authentication'),subtitle:Text(client.auth.currentUser?.appMetadata['provider']?.toString() ?? 'Supabase Auth')),
         const Padding(padding:EdgeInsets.all(12),child:Text('Profile editing and account deletion require a dedicated verified workflow; no destructive account action is exposed here.')),
       ],
-      if(rows.isEmpty && widget.section!='profile') const Padding(padding:EdgeInsets.symmetric(vertical:32),child:Column(children:[Icon(Icons.inbox_outlined,size:48,color:Colors.black38),SizedBox(height:8),Text('Nothing here yet.')])),
+      if(rows.isEmpty && widget.section!='profile') Padding(padding:const EdgeInsets.symmetric(vertical:32),child:Column(children:[
+        const Icon(Icons.inbox_outlined,size:48,color:Colors.black38),
+        const SizedBox(height:8),
+        Text(client.auth.currentUser == null
+          ? (widget.section == 'history' ? 'Your rides will appear here after you sign in and book.' : widget.section == 'saved' ? 'Sign in to save and manage your places.' : 'Sign in to view and submit your support requests.')
+          : 'Nothing here yet.'),
+      ])),
       for(final row in rows) if(widget.section=='history') Card(child:ListTile(
         leading:const Icon(Icons.local_taxi,color:Color(0xFF087E72)),
         title:Text('${row['category'] ?? 'Ride'} · ${row['status'] ?? 'unknown'}'),
