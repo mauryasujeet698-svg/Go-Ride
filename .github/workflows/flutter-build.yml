@@ -1,7 +1,12 @@
 name: Flutter Build
 
 on:
-  push
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -42,29 +47,61 @@ jobs:
             exit 1
           fi
 
-      # This is an installable CI test APK, signed with Android's debug key.
-      # It is not a production/Play Store release. The source build.gradle is
-      # left unchanged; only the ephemeral runner copy is adjusted for signing.
-      - name: Build optimized per-ABI APKs
+      - name: Configure release signing
+        shell: bash
+        env:
+          ALLWAYS_KEYSTORE_BASE64: ${{ secrets.ALLWAYS_KEYSTORE_BASE64 }}
+          ALLWAYS_KEYSTORE_PASSWORD: ${{ secrets.ALLWAYS_KEYSTORE_PASSWORD }}
+          ALLWAYS_KEY_PASSWORD: ${{ secrets.ALLWAYS_KEY_PASSWORD }}
         run: |
-          sed -i 's/signingConfig signingConfigs.release/signingConfig signingConfigs.debug/' android/app/build.gradle
-          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols
-          echo "APK sizes (bytes):"
-          find build/app/outputs/flutter-apk -maxdepth 1 -name '*.apk' -type f -printf '%f %s\n' | sort
-          while IFS= read -r apk; do
-            size=$(stat -c%s "$apk")
-            if [ "$size" -gt $((25 * 1024 * 1024)) ]; then
-              echo "APK exceeds 25 MiB limit: $apk ($size bytes)"
-              exit 1
-            fi
-            echo "Verified size limit: $apk ($size bytes)"
-          done < <(find build/app/outputs/flutter-apk -maxdepth 1 -name '*.apk' -type f)
+          set -euo pipefail
+          test -n "$ALLWAYS_KEYSTORE_BASE64"
+          test -n "$ALLWAYS_KEYSTORE_PASSWORD"
+          test -n "$ALLWAYS_KEY_PASSWORD"
+          printf '%s' "$ALLWAYS_KEYSTORE_BASE64" | base64 --decode > android/app/allways-release.jks
+          test -s android/app/allways-release.jks
+          KEY_ALIAS="$(keytool -list -v -keystore android/app/allways-release.jks -storepass "$ALLWAYS_KEYSTORE_PASSWORD" | awk -F': ' '/^Alias name:/{print $2; exit}')"
+          test "$KEY_ALIAS" = "allways"
+          cat > android/key.properties <<EOF
+          storeFile=app/allways-release.jks
+          storePassword=$ALLWAYS_KEYSTORE_PASSWORD
+          keyPassword=$ALLWAYS_KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          EOF
 
-      - name: Upload APK artifacts
+      - name: Build signed release APK
+        run: flutter build apk --release --target-platform android-arm64 --obfuscate --split-debug-info=build/symbols
+
+      - name: Enforce 25 MB release APK limit
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          test -s "$APK"
+          SIZE=$(stat -c%s "$APK")
+          echo "Release APK size: $SIZE bytes"
+          if [ "$SIZE" -gt 25000000 ]; then
+            echo "Release APK exceeds the 25,000,000-byte limit; refusing to publish."
+            exit 1
+          fi
+
+      - name: Verify signed release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt2 | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          test -n "$AAPT"
+          "$AAPT" dump badging build/app/outputs/flutter-apk/app-release.apk | grep -F "package: name='com.motis.mitfahr_app'"
+          "$APKSIGNER" verify --verbose build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload final APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: motis-ridesharing-apks
-          path: build/app/outputs/flutter-apk/*.apk
+          name: go-ride-final-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -75,3 +112,23 @@ jobs:
         run: flutter test --coverage
 
       - uses: codecov/codecov-action@v3
+
+      - name: Prepare final release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f 1)"
+          test -n "$VERSION"
+          mkdir -p release-assets
+          cp build/app/outputs/flutter-apk/app-release.apk "release-assets/go-ride-v${VERSION}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "release-assets/go-ride-latest.apk"
+
+      - name: Publish latest Go-Ride APK release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: go-ride-latest
+          name: Go-Ride Latest APK
+          prerelease: false
+          files: |
+            release-assets/go-ride-v*.apk
+            release-assets/go-ride-latest.apk
