@@ -7,11 +7,15 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/app_config.dart';
 import 'data/ride_backend.dart';
 
+final ValueNotifier<ThemeMode> appThemeMode = ValueNotifier<ThemeMode>(ThemeMode.dark);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try { final prefs = await SharedPreferences.getInstance(); appThemeMode.value = switch (prefs.getString('go_ride_theme') ?? 'dark') { 'light' => ThemeMode.light, 'system' => ThemeMode.system, _ => ThemeMode.dark }; } catch (_) {}
   var backendReady = false;
   try {
     await Supabase.initialize(
@@ -33,10 +37,12 @@ class GoRideApp extends StatelessWidget {
   final bool backendReady;
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  Widget build(BuildContext context) => ValueListenableBuilder<ThemeMode>(valueListenable: appThemeMode, builder: (context, selectedTheme, _) => MaterialApp(
     title: 'Go-Ride',
+    themeMode: selectedTheme,
+    theme: ThemeData.light(useMaterial3: true),
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
+    darkTheme: ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: ColorScheme.fromSeed(
@@ -92,7 +98,7 @@ class GoRideApp extends StatelessWidget {
       ),
     ),
     home: AuthGate(backendReady: backendReady),
-  );
+  ));
 }
 
 class AuthGate extends StatelessWidget {
@@ -351,10 +357,13 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
   }
 
   Future<void> book(GuestFare fare) async {
-    PendingBooking.pickup=pickupPoint; PendingBooking.destination=destinationPoint;
-    PendingBooking.pickupLabel=pickup.text.trim(); PendingBooking.destinationLabel=destination.text.trim(); PendingBooking.category=fare.category;
-    if (!widget.backendReady) { setState(() => error='Sign-in and booking are unavailable until backend configuration is restored.'); return; }
-    await Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => LoginScreen(onSignedIn: () => Navigator.of(context).pop())));
+    if (pickupPoint == null || destinationPoint == null) { setState(() => error = 'Set both pickup and destination before continuing.'); return; }
+    PendingBooking.pickup = pickupPoint; PendingBooking.destination = destinationPoint;
+    PendingBooking.pickupLabel = pickup.text.trim(); PendingBooking.destinationLabel = destination.text.trim(); PendingBooking.category = fare.category;
+    await Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => BookingReviewScreen(
+      pickupLabel: pickup.text.trim(), destinationLabel: destination.text.trim(), category: fare.category,
+      amountMinor: fare.amountMinor, currency: fare.currency, distanceKm: distanceKm ?? 0,
+      etaSeconds: fare.etaSeconds, backendReady: widget.backendReady)));
   }
 
 
@@ -731,6 +740,11 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                 childAspectRatio: 0.89,
                 children: [
                   serviceTile(
+                    icon: Icons.two_wheeler,
+                    label: 'Bike',
+                    onTap: () => chooseCategory('BIKE'),
+                  ),
+                  serviceTile(
                     icon: Icons.electric_rickshaw,
                     label: 'Auto',
                     onTap: () => chooseCategory('AUTO'),
@@ -965,7 +979,9 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                   color: const Color(0xFF202020),
                   child: ListTile(
                     leading: Icon(
-                      fare.category == 'AUTO'
+                      fare.category == 'BIKE'
+                          ? Icons.two_wheeler
+                          : fare.category == 'AUTO'
                           ? Icons.electric_rickshaw
                           : fare.category == 'MINI'
                               ? Icons.directions_car_filled
@@ -1047,7 +1063,9 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(
-                          fare.category == 'AUTO'
+                          fare.category == 'BIKE'
+                              ? Icons.two_wheeler
+                              : fare.category == 'AUTO'
                               ? Icons.electric_rickshaw
                               : fare.category == 'MINI'
                                   ? Icons.directions_car_filled
@@ -1864,23 +1882,65 @@ class AccountScreen extends StatelessWidget {
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.backendReady = true});
   final bool backendReady;
-  @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  @override State<SettingsScreen> createState() => _SettingsScreenState();
 }
 class _SettingsScreenState extends State<SettingsScreen> {
-  String theme = 'System', language = 'English', payment = 'Cash';
+  String language = 'English', payment = 'Cash';
   bool notifications = true, location = true;
-  @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Settings')), body: ListView(padding: const EdgeInsets.all(16), children: [
-    const Text('Preferences', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-    ListTile(leading: const Icon(Icons.palette_outlined), title: const Text('Theme'), trailing: DropdownButton<String>(value: theme, items: const [DropdownMenuItem(value:'System',child:Text('System')),DropdownMenuItem(value:'Light',child:Text('Light')),DropdownMenuItem(value:'Dark',child:Text('Dark'))], onChanged:(v)=>setState(()=>theme=v!))),
-    ListTile(leading: const Icon(Icons.language), title: const Text('Language'), trailing: DropdownButton<String>(value: language, items: const [DropdownMenuItem(value:'English',child:Text('English')),DropdownMenuItem(value:'हिन्दी',child:Text('हिन्दी'))], onChanged:(v)=>setState(()=>language=v!))),
-    ListTile(leading: const Icon(Icons.payment_outlined), title: const Text('Preferred payment'), trailing: DropdownButton<String>(value: payment, items: const [DropdownMenuItem(value:'Cash',child:Text('Cash')),DropdownMenuItem(value:'UPI',child:Text('UPI')),DropdownMenuItem(value:'Card',child:Text('Card'))], onChanged:(v)=>setState(()=>payment=v!))),
-    SwitchListTile(value: notifications, onChanged:(v)=>setState(()=>notifications=v), secondary: const Icon(Icons.notifications_outlined), title: const Text('Notifications')),
-    SwitchListTile(value: location, onChanged:(v)=>setState(()=>location=v), secondary: const Icon(Icons.location_on_outlined), title: const Text('Location services')),
-    const Divider(height:32), const Text('Account security', style: TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-    ExpansionTile(leading: const Icon(Icons.delete_forever_outlined, color: Colors.red), title: const Text('Delete Account', style: TextStyle(color: Colors.red)), subtitle: const Text('Hidden inside Settings'), children: [const Padding(padding: EdgeInsets.all(16), child: Text('Account deletion is not enabled until a verified server-side workflow can safely remove or anonymize personal data.'))]),
-    const Padding(padding: EdgeInsets.all(12), child: Text('Settings are local previews in this build; persistent preferences and payment processing need backend/provider configuration.', style: TextStyle(fontSize:12,color:Color(0xFFAAAAAA)))),
+  final methods = const ['Cash', 'UPI', 'Debit/Credit card', 'Go-Ride wallet'];
+  @override void initState() { super.initState(); _load(); }
+  Future<void> _load() async {
+    try { final p = await SharedPreferences.getInstance(); if (!mounted) return; setState(() { payment=p.getString('go_ride_payment')??'Cash'; language=p.getString('go_ride_language')??'English'; notifications=p.getBool('go_ride_notifications')??true; location=p.getBool('go_ride_location')??true; }); } catch (_) {}
+  }
+  Future<void> _saveString(String k,String v) async { try { final p=await SharedPreferences.getInstance(); await p.setString(k,v); } catch (_) {} }
+  Future<void> _saveBool(String k,bool v) async { try { final p=await SharedPreferences.getInstance(); await p.setBool(k,v); } catch (_) {} }
+  Future<void> _setTheme(ThemeMode mode) async {
+    appThemeMode.value=mode;
+    try { final p=await SharedPreferences.getInstance(); await p.setString('go_ride_theme',switch(mode){ThemeMode.light=>'light',ThemeMode.system=>'system',ThemeMode.dark=>'dark'}); } catch (_) {}
+  }
+  @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Settings')), body: ListView(padding: const EdgeInsets.all(16), children: [
+    const Text('Appearance',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+    Card(child: Column(children:[
+      RadioListTile<ThemeMode>(value:ThemeMode.system,groupValue:appThemeMode.value,onChanged:(v){if(v!=null)_setTheme(v);},title:const Text('System default'),subtitle:const Text('Match your phone settings'),secondary:const Icon(Icons.brightness_auto_outlined)),
+      RadioListTile<ThemeMode>(value:ThemeMode.light,groupValue:appThemeMode.value,onChanged:(v){if(v!=null)_setTheme(v);},title:const Text('Light'),secondary:const Icon(Icons.light_mode_outlined)),
+      RadioListTile<ThemeMode>(value:ThemeMode.dark,groupValue:appThemeMode.value,onChanged:(v){if(v!=null)_setTheme(v);},title:const Text('Dark'),secondary:const Icon(Icons.dark_mode_outlined)),
+    ])),
+    const SizedBox(height:16),const Text('Preferences',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+    ListTile(leading:const Icon(Icons.language),title:const Text('Language'),trailing:DropdownButton<String>(value:language,items:const[DropdownMenuItem(value:'English',child:Text('English')),DropdownMenuItem(value:'हिन्दी',child:Text('हिन्दी'))],onChanged:(v){if(v!=null){setState(()=>language=v);_saveString('go_ride_language',v);}})),
+    const SizedBox(height:16),const Text('Payment preferences',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+    const Text('Select a preferred method. You can review it again before booking.',style:TextStyle(color:Color(0xFF999999))),
+    for(final method in methods) Card(margin:const EdgeInsets.only(top:8),child:RadioListTile<String>(
+      value:method,groupValue:payment,onChanged:(v){if(v!=null){setState(()=>payment=v);_saveString('go_ride_payment',v);}},
+      title:Text(method),subtitle:Text(switch(method){'Cash'=>'Pay the driver directly after the ride','UPI'=>'BHIM, Google Pay, PhonePe and other UPI apps','Debit/Credit card'=>'Requires a secure payment provider','_'=>'Wallet top-ups are not available yet'}),
+      secondary:Icon(switch(method){'Cash'=>Icons.payments_outlined,'UPI'=>Icons.qr_code_2,'Debit/Credit card'=>Icons.credit_card_outlined,_=>Icons.account_balance_wallet_outlined}),
+    )),
+    if(payment!='Cash') Padding(padding:const EdgeInsets.only(top:8),child:Message(text:payment=='Go-Ride wallet'?'Wallet is a planned option only; no balance or payment will be charged.':'This preference is saved only. Online payments are not active until a verified payment provider is integrated.')),
+    const Divider(height:32),const Text('App controls',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+    SwitchListTile(value:notifications,onChanged:(v){setState(()=>notifications=v);_saveBool('go_ride_notifications',v);},secondary:const Icon(Icons.notifications_outlined),title:const Text('Notifications')),
+    SwitchListTile(value:location,onChanged:(v){setState(()=>location=v);_saveBool('go_ride_location',v);},secondary:const Icon(Icons.location_on_outlined),title:const Text('Location services'),subtitle:const Text('This preference does not replace Android permissions')),
+    const Divider(height:32),const Text('Account security',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+    ExpansionTile(leading:const Icon(Icons.delete_forever_outlined,color:Colors.red),title:const Text('Delete Account',style:TextStyle(color:Colors.red)),subtitle:const Text('Account removal options'),children:const[Padding(padding:EdgeInsets.all(16),child:Text('Account deletion is not enabled until a verified server-side workflow can safely remove or anonymize personal data.'))]),
+    const Padding(padding:EdgeInsets.all(12),child:Text('Theme and preferences are saved on this device. Language is saved, but full translation depends on localization support. Payment processing is not enabled by these settings.',style:TextStyle(fontSize:12,color:Color(0xFF999999)))),
+  ]));
+}
+
+class BookingReviewScreen extends StatelessWidget {
+  const BookingReviewScreen({super.key,required this.pickupLabel,required this.destinationLabel,required this.category,required this.amountMinor,required this.currency,required this.distanceKm,required this.etaSeconds,required this.backendReady});
+  final String pickupLabel,destinationLabel,category,currency;
+  final int amountMinor,etaSeconds; final double distanceKm; final bool backendReady;
+  @override Widget build(BuildContext context) => Scaffold(appBar:AppBar(title:const Text('Review your booking')),body:ListView(padding:const EdgeInsets.all(16),children:[
+    Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      const Text('YOUR TRIP',style:TextStyle(fontSize:12,letterSpacing:1.2,color:Color(0xFF999999))),const SizedBox(height:14),
+      Row(crossAxisAlignment:CrossAxisAlignment.start,children:[const Icon(Icons.radio_button_checked,color:Color(0xFFB9D5CE)),const SizedBox(width:12),Expanded(child:Text(pickupLabel))]),
+      const Padding(padding:EdgeInsets.only(left:5),child:SizedBox(height:26,child:VerticalDivider(width:1))),
+      Row(crossAxisAlignment:CrossAxisAlignment.start,children:[const Icon(Icons.location_on,color:Colors.redAccent),const SizedBox(width:12),Expanded(child:Text(destinationLabel))]),
+      const Divider(height:28),
+      ListTile(contentPadding:EdgeInsets.zero,leading:Icon(category=='BIKE'?Icons.two_wheeler:category=='AUTO'?Icons.electric_rickshaw:Icons.directions_car),title:Text(category),subtitle:Text('${distanceKm.toStringAsFixed(1)} km · \${(etaSeconds/60).ceil()} min'),trailing:Text('$currency \${(amountMinor/100).toStringAsFixed(0)}',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18))),
+    ]))),
+    const SizedBox(height:8),Card(child:ListTile(leading:const Icon(Icons.payments_outlined),title:const Text('Payment method'),subtitle:const Text('Review your preferred method in Settings before confirming.'),trailing:const Icon(Icons.chevron_right),onTap:()=>Navigator.of(context).push<void>(MaterialPageRoute<void>(builder:(_)=>const SettingsScreen())))),
+    const SizedBox(height:12),const Message(text:'No ride is requested yet. Review the trip, then sign in to continue to live booking.'),
+    const SizedBox(height:12),FilledButton.icon(onPressed:!backendReady?null:()=>Navigator.of(context).push<void>(MaterialPageRoute<void>(builder:(_)=>LoginScreen(onSignedIn:(){Navigator.of(context).popUntil((route)=>route.isFirst);}))),icon:const Icon(Icons.login),label:const Text('Sign in to continue')),
+    TextButton(onPressed:()=>Navigator.of(context).pop(),child:const Text('Change trip details')),
   ]));
 }
 
