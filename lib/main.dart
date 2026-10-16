@@ -393,7 +393,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
       body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
         const Text('Where would you like to go?',style:TextStyle(fontSize:23,fontWeight:FontWeight.bold)),
         const SizedBox(height:6),
-        const Text('Search a destination, compare ride fares, and request a ride when you are ready.'),
+        const Text('Search a destination, compare ride fares, and explore routes without signing in. Sign in only to request a real ride.'),
         const SizedBox(height:14),
         TextField(
           controller: destination,
