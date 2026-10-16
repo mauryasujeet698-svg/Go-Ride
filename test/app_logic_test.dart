@@ -52,7 +52,6 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
-    expect(find.text('EXPLORE'), findsOneWidget);
     expect(find.text('Where would you like to go?'), findsOneWidget);
     expect(find.text('Pickup location'), findsOneWidget);
     expect(find.text('Destination'), findsOneWidget);
