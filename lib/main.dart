@@ -141,7 +141,7 @@ class PreviewHomeScreen extends StatefulWidget {
 }
 
 class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
-  static const _tileUrl = String.fromEnvironment('OSM_TILE_URL', defaultValue: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png');
+  static const _tileUrl = String.fromEnvironment('OSM_TILE_URL', defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
   static const _nominatim = String.fromEnvironment('GEOCODER_URL', defaultValue: 'https://nominatim.openstreetmap.org');
   static const _osrm = String.fromEnvironment('ROUTING_URL', defaultValue: 'https://router.project-osrm.org');
   final pickup = TextEditingController();
@@ -495,7 +495,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                 ]),
                 RichAttributionWidget(attributions: [
                   TextSourceAttribution('© OpenStreetMap contributors'),
-                  TextSourceAttribution('© CARTO'),
+                  
                 ]),
               ],
             ),
@@ -688,7 +688,7 @@ class RideHomeScreen extends StatefulWidget {
   State<RideHomeScreen> createState() => _RideHomeScreenState();
 }
 class _RideHomeScreenState extends State<RideHomeScreen> {
-  static const _tileUrl = 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+  static const _tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   static const _routingUrl = 'https://router.project-osrm.org';
   final pickupText = TextEditingController();
   final destinationText = TextEditingController();
@@ -956,7 +956,7 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
               ]),
               RichAttributionWidget(attributions: [
                 TextSourceAttribution('© OpenStreetMap contributors'),
-                TextSourceAttribution('© CARTO'),
+                
               ]),
             ],
           ),
