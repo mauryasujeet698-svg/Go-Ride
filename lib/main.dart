@@ -227,7 +227,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
   Future<PlaceResult> _resolveTypedPlace(String raw) async {
     final query = raw.trim();
     if (query.isEmpty) throw Exception('Enter both a pickup and destination.');
-    final withCountry = RegExp(r'\\bIndia\\b', caseSensitive: false).hasMatch(query)
+    final withCountry = RegExp(r'\bIndia\b', caseSensitive: false).hasMatch(query)
         ? query : '$query, India';
     final uri = Uri.parse('$_nominatim/search').replace(queryParameters: {
       'q': withCountry,
