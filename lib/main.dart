@@ -1911,7 +1911,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     const Text('Select a preferred method. You can review it again before booking.',style:TextStyle(color:Color(0xFF999999))),
     for(final method in methods) Card(margin:const EdgeInsets.only(top:8),child:RadioListTile<String>(
       value:method,groupValue:payment,onChanged:(v){if(v!=null){setState(()=>payment=v);_saveString('go_ride_payment',v);}},
-      title:Text(method),subtitle:Text(switch(method){'Cash'=>'Pay the driver directly after the ride','UPI'=>'BHIM, Google Pay, PhonePe and other UPI apps','Debit/Credit card'=>'Requires a secure payment provider','_'=>'Wallet top-ups are not available yet'}),
+      title:Text(method),subtitle:Text(switch(method){'Cash'=>'Pay the driver directly after the ride','UPI'=>'BHIM, Google Pay, PhonePe and other UPI apps','Debit/Credit card'=>'Requires a secure payment provider',_=>'Wallet top-ups are not available yet'}),
       secondary:Icon(switch(method){'Cash'=>Icons.payments_outlined,'UPI'=>Icons.qr_code_2,'Debit/Credit card'=>Icons.credit_card_outlined,_=>Icons.account_balance_wallet_outlined}),
     )),
     if(payment!='Cash') Padding(padding:const EdgeInsets.only(top:8),child:Message(text:payment=='Go-Ride wallet'?'Wallet is a planned option only; no balance or payment will be charged.':'This preference is saved only. Online payments are not active until a verified payment provider is integrated.')),
