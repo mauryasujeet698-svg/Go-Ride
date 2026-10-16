@@ -370,10 +370,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
     void openSection(String section) {
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => CustomerSectionScreen(
-            section: section,
-            backendReady: widget.backendReady,
-          ),
+          builder: (_) => section == 'account' ? AccountScreen(backendReady: widget.backendReady) : section == 'settings' ? SettingsScreen(backendReady: widget.backendReady) : section == 'history' ? HistoryScreen(backendReady: widget.backendReady) : CustomerSectionScreen(section: section, backendReady: widget.backendReady),
         ),
       );
     }
@@ -1024,10 +1021,8 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
             setState(() => planningRoute = false);
             return;
           }
-          if (index == 2 || index == 3) {
-            openSection(index == 2 ? 'history' : 'profile');
-            return;
-          }
+          if (index == 2) { Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => const ParcelScreen())); return; }
+          if (index == 3) { openSection('account'); return; }
           showModalBottomSheet<void>(
             context: context,
             showDragHandle: true,
@@ -1090,9 +1085,9 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
             label: 'Services',
           ),
           NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Activity',
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
+            label: 'Parcel',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
@@ -1412,7 +1407,7 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
 
   void openCustomerSection(String section) {
     Navigator.of(context).push<void>(MaterialPageRoute<void>(
-      builder: (_) => CustomerSectionScreen(section: section),
+      builder: (_) => section == 'account' ? AccountScreen() : section == 'settings' ? SettingsScreen() : section == 'history' ? HistoryScreen() : CustomerSectionScreen(section: section),
     ));
   }
 
@@ -1627,7 +1622,7 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
   SupabaseClient get client => Supabase.instance.client;
   bool get isGuest => !widget.backendReady || client.auth.currentUser == null;
   String get title => switch (widget.section) {
-    'history' => 'Ride history', 'saved' => 'Saved places', 'support' => 'Customer support', _ => 'My profile',
+    'history' => 'Ride history', 'rideHistory' => 'Ride history', 'parcelHistory' => 'Parcel history', 'saved' => 'Saved places', 'support' => 'Customer support', _ => 'My profile',
   };
 
   @override
@@ -1650,7 +1645,7 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
         return;
       }
       dynamic result;
-      if (widget.section == 'history') {
+      if (widget.section == 'history' || widget.section == 'rideHistory') {
         result = await client.from('rides').select('id,status,category,fare_minor,currency,pickup_label,destination_label,created_at').eq('customer_id', user.id).order('created_at', ascending: false).limit(50);
       } else if (widget.section == 'saved') {
         result = await client.from('saved_places').select('id,label,address,latitude,longitude,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(100);
@@ -1771,14 +1766,14 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
         ListTile(leading:const Icon(Icons.verified_user_outlined),title:const Text('Account authentication'),subtitle:Text(isGuest ? 'Sign in to view account authentication details' : (client.auth.currentUser?.appMetadata['provider']?.toString() ?? 'Supabase Auth'))),
         const Padding(padding:EdgeInsets.all(12),child:Text('Profile editing and account deletion require a dedicated verified workflow; no destructive account action is exposed here.')),
       ],
-      if(rows.isEmpty && widget.section!='profile') Padding(padding:const EdgeInsets.symmetric(vertical:32),child:Column(children:[
+      if(rows.isEmpty && widget.section!='profile' && widget.section!='account') Padding(padding:const EdgeInsets.symmetric(vertical:32),child:Column(children:[
         const Icon(Icons.inbox_outlined,size:48,color:Colors.black38),
         const SizedBox(height:8),
         Text(isGuest
           ? (widget.section == 'history' ? 'Your rides will appear here after you sign in and book.' : widget.section == 'saved' ? 'Sign in to save and manage your places.' : 'Sign in to view and submit your support requests.')
           : 'Nothing here yet.'),
       ])),
-      for(final row in rows) if(widget.section=='history') Card(child:ListTile(
+      for(final row in rows) if(widget.section=='history' || widget.section=='rideHistory') Card(child:ListTile(
         leading:const Icon(Icons.local_taxi,color:Color(0xFF087E72)),
         title:Text('${row['category'] ?? 'Ride'} · ${row['status'] ?? 'unknown'}'),
         subtitle:Text('${row['pickup_label'] ?? 'Pickup'} → ${row['destination_label'] ?? 'Destination'}\n${row['created_at'] ?? ''}',maxLines:3,overflow:TextOverflow.ellipsis),
@@ -1797,6 +1792,96 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
       )),
     ]))),
   );
+}
+
+
+class HistoryScreen extends StatelessWidget {
+  const HistoryScreen({super.key, this.backendReady = true});
+  final bool backendReady;
+  @override
+  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('History')), body: ListView(padding: const EdgeInsets.all(16), children: [
+    Card(child: ListTile(leading: const Icon(Icons.local_taxi), title: const Text('Ride History'), subtitle: const Text('Previous rides, fares and statuses'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => CustomerSectionScreen(section: 'rideHistory', backendReady: backendReady))))),
+    Card(child: ListTile(leading: const Icon(Icons.inventory_2_outlined), title: const Text('Parcel History'), subtitle: const Text('Sent and received parcels'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ParcelHistoryScreen())))),
+  ]));
+}
+class ParcelScreen extends StatelessWidget {
+  const ParcelScreen({super.key});
+  @override
+  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Parcel')), body: ListView(padding: const EdgeInsets.all(16), children: [
+    Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFF2E5DF), borderRadius: BorderRadius.circular(22)), child: const Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Send anything, anywhere', style: TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold)), SizedBox(height: 6), Text('Safe, simple local delivery', style: TextStyle(color: Colors.black87))])), Icon(Icons.inventory_2, size: 54, color: Colors.black87)])),
+    const SizedBox(height: 16),
+    Card(child: ListTile(leading: const Icon(Icons.outbox_outlined), title: const Text('Send Parcel'), subtitle: const Text('Send a parcel to another person or address'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ParcelRequestScreen(mode: 'Send Parcel'))))),
+    Card(child: ListTile(leading: const Icon(Icons.move_to_inbox_outlined), title: const Text('Receive Parcel'), subtitle: const Text('Arrange to receive a parcel from someone'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ParcelRequestScreen(mode: 'Receive Parcel'))))),
+    const Padding(padding: EdgeInsets.only(top: 20, bottom: 8), child: Text('Other parcel services', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold))),
+    for (final item in const [('Same-day delivery', Icons.rocket_launch_outlined), ('Scheduled pickup', Icons.calendar_month_outlined), ('Bulk / business delivery', Icons.inventory_outlined), ('Fragile items', Icons.wine_bar_outlined), ('Track parcel', Icons.location_searching_outlined)])
+      Card(child: ListTile(leading: Icon(item.$2), title: Text(item.$1), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => item.$1 == 'Track parcel' ? const ParcelHistoryScreen() : ParcelRequestScreen(mode: item.$1))))),
+    const Padding(padding: EdgeInsets.only(top: 12), child: Text('Parcel requests are not yet connected to a live delivery backend. No real order is submitted from this screen.', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 12))),
+  ]));
+}
+class ParcelRequestScreen extends StatefulWidget {
+  const ParcelRequestScreen({super.key, required this.mode});
+  final String mode;
+  @override
+  State<ParcelRequestScreen> createState() => _ParcelRequestScreenState();
+}
+class _ParcelRequestScreenState extends State<ParcelRequestScreen> {
+  final pickup = TextEditingController(), destination = TextEditingController(), details = TextEditingController(), phone = TextEditingController();
+  @override
+  void dispose() { pickup.dispose(); destination.dispose(); details.dispose(); phone.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text(widget.mode)), body: ListView(padding: const EdgeInsets.all(16), children: [
+    TextField(controller: pickup, decoration: const InputDecoration(labelText: 'Pickup location', prefixIcon: Icon(Icons.trip_origin))),
+    const SizedBox(height: 12), TextField(controller: destination, decoration: const InputDecoration(labelText: 'Delivery / sender location', prefixIcon: Icon(Icons.location_on_outlined))),
+    const SizedBox(height: 12), TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Contact mobile number', prefixIcon: Icon(Icons.phone))),
+    const SizedBox(height: 12), TextField(controller: details, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Parcel description, size and instructions')),
+    const SizedBox(height: 20), FilledButton(onPressed: () => showDialog<void>(context: context, builder: (ctx) => AlertDialog(title: const Text('Parcel booking not live yet'), content: const Text('Your details have not been sent or saved. Parcel booking requires a secured backend and delivery operations before accepting real orders.'), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Got it'))])), child: const Text('Continue')),
+  ]));
+}
+class ParcelHistoryScreen extends StatelessWidget {
+  const ParcelHistoryScreen({super.key});
+  @override
+  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Parcel History')), body: const Center(child: Padding(padding: EdgeInsets.all(28), child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.inventory_2_outlined, size: 52), SizedBox(height: 12), Text('No parcel history yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Parcel history will be available when parcel bookings are connected to the backend.', textAlign: TextAlign.center)]))));
+}
+class AccountScreen extends StatelessWidget {
+  const AccountScreen({super.key, this.backendReady = true});
+  final bool backendReady;
+  @override
+  Widget build(BuildContext context) {
+    void open(String section) => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => section == 'settings' ? SettingsScreen(backendReady: backendReady) : section == 'history' ? HistoryScreen(backendReady: backendReady) : section == 'signin' ? LoginScreen() : CustomerSectionScreen(section: section, backendReady: backendReady)));
+    final signedIn = backendReady && Supabase.instance.client.auth.currentUser != null;
+    final items = <(String, IconData, String)>[
+      ('My Profile', Icons.person_outline, 'profile'), ('History', Icons.history, 'history'), ('Saved Places', Icons.place_outlined, 'saved'), ('Payment Methods', Icons.credit_card_outlined, 'payments'), ('Help & Support', Icons.support_agent, 'support'), ('Settings', Icons.settings_outlined, 'settings'), ('Privacy Policy', Icons.privacy_tip_outlined, 'privacy'), ('Terms & Conditions', Icons.description_outlined, 'terms'), ('About Go-Ride', Icons.info_outline, 'about'),
+    ];
+    return Scaffold(appBar: AppBar(title: const Text('Account')), body: ListView(padding: const EdgeInsets.all(16), children: [
+      Card(child: ListTile(leading: const CircleAvatar(child: Icon(Icons.person)), title: Text(signedIn ? (Supabase.instance.client.auth.currentUser?.phone ?? Supabase.instance.client.auth.currentUser?.email ?? 'Go-Ride customer') : 'Guest User'), subtitle: Text(signedIn ? 'Manage your Go-Ride account' : 'Explore Go-Ride without signing in'), trailing: const Icon(Icons.chevron_right), onTap: () => open(signedIn ? 'profile' : 'signin'))),
+      if (!signedIn) Padding(padding: const EdgeInsets.only(top: 8, bottom: 8), child: FilledButton.icon(onPressed: () => open('signin'), icon: const Icon(Icons.login), label: const Text('Log in / Sign up'))),
+      for (final item in items) ListTile(leading: Icon(item.$2), title: Text(item.$1), trailing: const Icon(Icons.chevron_right), onTap: () => item.$3 == 'privacy' || item.$3 == 'terms' || item.$3 == 'about' ? showDialog<void>(context: context, builder: (ctx) => AlertDialog(title: Text(item.$1), content: Text(item.$3 == 'privacy' ? 'Publish a reviewed privacy policy before public launch.' : item.$3 == 'terms' ? 'Terms and conditions must be reviewed and published before public launch.' : 'Go-Ride is a local ride and parcel service in development.'), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))])) : open(item.$3)),
+      const Divider(),
+      if (signedIn) OutlinedButton.icon(onPressed: () async { await Supabase.instance.client.auth.signOut(); if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst); }, icon: const Icon(Icons.logout), label: const Text('Log out')),
+    ]));
+  }
+}
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key, this.backendReady = true});
+  final bool backendReady;
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+class _SettingsScreenState extends State<SettingsScreen> {
+  String theme = 'System', language = 'English', payment = 'Cash';
+  bool notifications = true, location = true;
+  @override
+  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Settings')), body: ListView(padding: const EdgeInsets.all(16), children: [
+    const Text('Preferences', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+    ListTile(leading: const Icon(Icons.palette_outlined), title: const Text('Theme'), trailing: DropdownButton<String>(value: theme, items: const [DropdownMenuItem(value:'System',child:Text('System')),DropdownMenuItem(value:'Light',child:Text('Light')),DropdownMenuItem(value:'Dark',child:Text('Dark'))], onChanged:(v)=>setState(()=>theme=v!))),
+    ListTile(leading: const Icon(Icons.language), title: const Text('Language'), trailing: DropdownButton<String>(value: language, items: const [DropdownMenuItem(value:'English',child:Text('English')),DropdownMenuItem(value:'हिन्दी',child:Text('हिन्दी'))], onChanged:(v)=>setState(()=>language=v!))),
+    ListTile(leading: const Icon(Icons.payment_outlined), title: const Text('Preferred payment'), trailing: DropdownButton<String>(value: payment, items: const [DropdownMenuItem(value:'Cash',child:Text('Cash')),DropdownMenuItem(value:'UPI',child:Text('UPI')),DropdownMenuItem(value:'Card',child:Text('Card'))], onChanged:(v)=>setState(()=>payment=v!))),
+    SwitchListTile(value: notifications, onChanged:(v)=>setState(()=>notifications=v), secondary: const Icon(Icons.notifications_outlined), title: const Text('Notifications')),
+    SwitchListTile(value: location, onChanged:(v)=>setState(()=>location=v), secondary: const Icon(Icons.location_on_outlined), title: const Text('Location services')),
+    const Divider(height:32), const Text('Account security', style: TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
+    ExpansionTile(leading: const Icon(Icons.delete_forever_outlined, color: Colors.red), title: const Text('Delete Account', style: TextStyle(color: Colors.red)), subtitle: const Text('Hidden inside Settings'), children: [const Padding(padding: EdgeInsets.all(16), child: Text('Account deletion is not enabled until a verified server-side workflow can safely remove or anonymize personal data.'))]),
+    const Padding(padding: EdgeInsets.all(12), child: Text('Settings are local previews in this build; persistent preferences and payment processing need backend/provider configuration.', style: TextStyle(fontSize:12,color:Color(0xFFAAAAAA)))),
+  ]));
 }
 
 class Message extends StatelessWidget {
