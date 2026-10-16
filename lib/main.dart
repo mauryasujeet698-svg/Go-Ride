@@ -536,10 +536,15 @@ class RideHomeScreen extends StatefulWidget {
   State<RideHomeScreen> createState() => _RideHomeScreenState();
 }
 class _RideHomeScreenState extends State<RideHomeScreen> {
+  static const _tileUrl = 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+  static const _routingUrl = 'https://router.project-osrm.org';
   final pickupText = TextEditingController();
   final destinationText = TextEditingController();
+  final mapController = MapController();
   final backend = RideBackend(Supabase.instance.client);
   GeoPoint? pickup, destination;
+  List<ll.LatLng> routePoints = [];
+  bool choosePickupOnMap = false;
   List<FareQuote> quotes = [];
   RideRecord? ride;
   StreamSubscription<List<Map<String, dynamic>>>? eventSub;
@@ -562,7 +567,53 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
     } else { locate(); }
   }
   @override
-  void dispose() { eventSub?.cancel(); pickupText.dispose(); destinationText.dispose(); super.dispose(); }
+  void dispose() { eventSub?.cancel(); pickupText.dispose(); destinationText.dispose(); mapController.dispose(); super.dispose(); }
+
+  void _mapTap(TapPosition tap, ll.LatLng point) {
+    setState(() {
+      final selected = GeoPoint(point.latitude, point.longitude);
+      if (choosePickupOnMap || pickup == null) {
+        pickup = selected;
+        pickupText.text = '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}';
+        choosePickupOnMap = false;
+      } else {
+        destination = selected;
+        destinationText.text = '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}';
+      }
+      routePoints = [];
+      quotes = [];
+      error = null;
+      notice = 'Location selected on map. Get fares to continue.';
+    });
+    _moveMap(point);
+  }
+
+  void _moveMap(ll.LatLng point) {
+    try { mapController.move(point, 14); } catch (_) {}
+  }
+
+  Future<void> _loadRouteShape() async {
+    final a = pickup;
+    final b = destination;
+    if (a == null || b == null) return;
+    try {
+      final uri = Uri.parse('$_routingUrl/route/v1/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}')
+          .replace(queryParameters: {'overview': 'full', 'geometries': 'geojson', 'steps': 'false'});
+      final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) return;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final routes = (data['routes'] as List?) ?? [];
+      if (routes.isEmpty) return;
+      final geometry = Map<String, dynamic>.from(routes.first as Map)['geometry'] as Map<String, dynamic>;
+      final coords = (geometry['coordinates'] as List).cast<List<dynamic>>();
+      final points = coords.map((c) => ll.LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())).toList();
+      if (!mounted || points.isEmpty) return;
+      setState(() => routePoints = points);
+      mapController.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(48)));
+    } catch (_) {
+      // Route pricing and booking use the backend; the visible line is an enhancement.
+    }
+  }
 
   Future<void> restoreRide() async {
     try { final r = await backend.activeRide(); if (!mounted || r == null) return; setState(() => ride = r); watchRide(r); }
@@ -578,6 +629,7 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) throw Exception('Location permission is needed for pickup.');
       final p = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 15)));
       pickup = GeoPoint(p.latitude, p.longitude);
+      _moveMap(ll.LatLng(p.latitude, p.longitude));
       var label = '${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}';
       try {
         final list = await placemarkFromCoordinates(p.latitude, p.longitude);
@@ -604,6 +656,7 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
         destination = GeoPoint(places.first.latitude, places.first.longitude);
       }
       final result = await backend.estimate(pickup!, destination!);
+      await _loadRouteShape();
       if (mounted) setState(() { quotes = result; if (result.isEmpty) notice = 'No ride categories are currently available.'; });
     } on PostgrestException catch (e) { if (mounted) setState(() => error = friendlyError(e.message)); }
     catch (e) { if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', '')); }
@@ -709,6 +762,59 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
       const SizedBox(height: 18),
       if (error != null) Message(text: error!, isError: true),
       if (notice != null) Message(text: notice!),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: SizedBox(
+          height: 270,
+          child: FlutterMap(
+            mapController: mapController,
+            options: MapOptions(
+              initialCenter: ll.LatLng(pickup?.latitude ?? 25.89, pickup?.longitude ?? 81.99),
+              initialZoom: 11,
+              onTap: _mapTap,
+            ),
+            children: [
+              TileLayer(urlTemplate: _tileUrl, userAgentPackageName: 'com.goride.customer', maxZoom: 19),
+              if (routePoints.isNotEmpty)
+                PolylineLayer(polylines: [Polyline(points: routePoints, color: Colors.white, strokeWidth: 5)]),
+              MarkerLayer(markers: [
+                if (pickup != null) Marker(
+                  point: ll.LatLng(pickup!.latitude, pickup!.longitude),
+                  width: 42, height: 42,
+                  child: const Icon(Icons.trip_origin, color: Color(0xFFB9D5CE), size: 30),
+                ),
+                if (destination != null) Marker(
+                  point: ll.LatLng(destination!.latitude, destination!.longitude),
+                  width: 42, height: 42,
+                  child: const Icon(Icons.location_pin, color: Colors.white, size: 40),
+                ),
+              ]),
+              RichAttributionWidget(attributions: [
+                TextSourceAttribution('© OpenStreetMap contributors'),
+                TextSourceAttribution('© CARTO'),
+              ]),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: OutlinedButton.icon(
+          onPressed: locating ? null : locate,
+          icon: const Icon(Icons.my_location),
+          label: const Text('Use my location'),
+        )),
+        const SizedBox(width: 8),
+        Expanded(child: OutlinedButton.icon(
+          onPressed: () => setState(() {
+            choosePickupOnMap = true;
+            notice = 'Tap the map to choose your pickup.';
+          }),
+          icon: const Icon(Icons.touch_app),
+          label: const Text('Set pickup on map'),
+        )),
+      ]),
+      const SizedBox(height: 12),
       if (ride != null) ...[
         Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Your ride status', style: TextStyle(color: Colors.black54)),
