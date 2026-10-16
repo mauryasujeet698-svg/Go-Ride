@@ -151,6 +151,8 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
   List<ll.LatLng> route = [];
   List<GuestFare> fares = [];
   bool busy = false, locating = false, choosePickup = false;
+  bool planningRoute = false;
+  String? preferredCategory;
   String? error, info;
   double? distanceKm;
   int? routeSeconds;
@@ -355,192 +357,675 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
     await Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => LoginScreen(onSignedIn: () => Navigator.of(context).pop())));
   }
 
+
   @override
   Widget build(BuildContext context) {
-    final center = pickupPoint != null ? ll.LatLng(pickupPoint!.latitude,pickupPoint!.longitude) : const ll.LatLng(25.89,81.99);
+    final center = pickupPoint != null
+        ? ll.LatLng(pickupPoint!.latitude, pickupPoint!.longitude)
+        : const ll.LatLng(25.89, 81.99);
+    final visibleFares = preferredCategory == null
+        ? fares
+        : fares.where((fare) => fare.category.toUpperCase() == preferredCategory).toList();
+
+    void openSection(String section) {
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => CustomerSectionScreen(
+            section: section,
+            backendReady: widget.backendReady,
+          ),
+        ),
+      );
+    }
+
+    void chooseCategory(String category) {
+      setState(() {
+        preferredCategory = category;
+        planningRoute = true;
+        error = null;
+        info = null;
+      });
+    }
+
+    Widget serviceTile({
+      required IconData icon,
+      required String label,
+      required VoidCallback onTap,
+    }) {
+      return Material(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 12, 6, 10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 70,
+                  height: 70,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF292929),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 34, color: Colors.white),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Go-Ride'),
         actions: [
           PopupMenuButton<String>(
-            tooltip: 'Explore Go-Ride',
+            tooltip: 'Account and trips',
             onSelected: (section) {
               if (section == 'signin') {
                 if (!widget.backendReady) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign-in is temporarily unavailable because backend configuration is missing.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Sign-in is temporarily unavailable because backend configuration is missing.',
+                      ),
+                    ),
+                  );
                   return;
                 }
-                Navigator.of(context).push<void>(MaterialPageRoute<void>(
-                  builder: (_) => LoginScreen(onSignedIn: () => Navigator.of(context).pop()),
-                ));
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => LoginScreen(
+                      onSignedIn: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                );
               } else {
-                Navigator.of(context).push<void>(MaterialPageRoute<void>(
-                  builder: (_) => CustomerSectionScreen(section: section, backendReady: widget.backendReady),
-                ));
+                openSection(section);
               }
             },
             itemBuilder: (context) => const [
-              PopupMenuItem(value: 'history', child: ListTile(leading: Icon(Icons.history), title: Text('Ride history'), contentPadding: EdgeInsets.zero)),
-              PopupMenuItem(value: 'saved', child: ListTile(leading: Icon(Icons.bookmark_outline), title: Text('Saved places'), contentPadding: EdgeInsets.zero)),
-              PopupMenuItem(value: 'support', child: ListTile(leading: Icon(Icons.support_agent), title: Text('Customer support'), contentPadding: EdgeInsets.zero)),
-              PopupMenuItem(value: 'profile', child: ListTile(leading: Icon(Icons.person_outline), title: Text('My profile'), contentPadding: EdgeInsets.zero)),
+              PopupMenuItem(
+                value: 'history',
+                child: ListTile(
+                  leading: Icon(Icons.history),
+                  title: Text('Ride history'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'saved',
+                child: ListTile(
+                  leading: Icon(Icons.bookmark_outline),
+                  title: Text('Saved places'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'support',
+                child: ListTile(
+                  leading: Icon(Icons.support_agent),
+                  title: Text('Customer support'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'profile',
+                child: ListTile(
+                  leading: Icon(Icons.person_outline),
+                  title: Text('My profile'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
               PopupMenuDivider(),
-              PopupMenuItem(value: 'signin', child: ListTile(leading: Icon(Icons.login), title: Text('Sign in to book'), contentPadding: EdgeInsets.zero)),
+              PopupMenuItem(
+                value: 'signin',
+                child: ListTile(
+                  leading: Icon(Icons.login),
+                  title: Text('Sign in to book'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
             ],
           ),
         ],
       ),
-      body: SafeArea(child: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('Where would you like to go?',style:TextStyle(fontSize:23,fontWeight:FontWeight.bold)),
-        const SizedBox(height:6),
-        const Text('Search a destination, compare ride fares, and explore routes without signing in. Sign in only to request a real ride.'),
-        const SizedBox(height:14),
-        TextField(
-          controller: destination,
-          textCapitalization: TextCapitalization.words,
-          decoration: InputDecoration(
-            labelText: 'Destination',
-            hintText: 'Where to?',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: IconButton(
-              tooltip: 'Search destination',
-              onPressed: busy ? null : () => searchAddress(forPickup: false),
-              icon: const Icon(Icons.arrow_forward),
-            ),
-          ),
-          onChanged: (_) => setState(() {
-            destinationPoint = null;
-            route = [];
-            fares = [];
-            distanceKm = null;
-            error = null;
-            info = null;
-          }),
-          onSubmitted: (_) => getRouteAndFares(),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: pickup,
-          textCapitalization: TextCapitalization.words,
-          decoration: InputDecoration(
-            labelText: 'Pickup location',
-            prefixIcon: const Icon(Icons.trip_origin),
-            suffixIcon: IconButton(
-              tooltip: 'Search pickup',
-              onPressed: busy ? null : () => searchAddress(forPickup: true),
-              icon: const Icon(Icons.search),
-            ),
-          ),
-          onChanged: (_) => setState(() {
-            pickupPoint = null;
-            route = [];
-            fares = [];
-            distanceKm = null;
-            error = null;
-            info = null;
-          }),
-          onSubmitted: (_) => searchAddress(forPickup: true),
-        ),
-        const SizedBox(height: 10),
-        Row(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
           children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: locating ? null : locatePickup,
-                icon: locating
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.my_location),
-                label: const Text('Use my location'),
-              ),
+            const Text(
+              'Where would you like to go?',
+              style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => setState(() => choosePickup = true),
-                icon: const Icon(Icons.touch_app),
-                label: const Text('Set pickup on map'),
-              ),
+            const SizedBox(height: 6),
+            const Text(
+              'Compare local ride options without signing in. Sign in only when you are ready to request a real ride.',
+              style: TextStyle(color: Color(0xFFBBBBBB), height: 1.35),
             ),
+            const SizedBox(height: 18),
+            TextField(
+              key: const Key('destination-search'),
+              controller: destination,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: planningRoute ? 'Destination' : null,
+                hintText: 'Where to?',
+                prefixIcon: const Icon(Icons.search, size: 25),
+                suffixIcon: IconButton(
+                  tooltip: planningRoute ? 'Search destination' : 'Plan a ride',
+                  onPressed: busy
+                      ? null
+                      : () {
+                          if (!planningRoute) {
+                            setState(() => planningRoute = true);
+                          } else {
+                            searchAddress(forPickup: false);
+                          }
+                        },
+                  icon: Icon(
+                    planningRoute ? Icons.arrow_forward : Icons.north_east,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 19,
+                ),
+                filled: true,
+                fillColor: const Color(0xFF252525),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(32),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(32),
+                  borderSide: const BorderSide(color: Color(0xFF3D3D3D)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(32),
+                  borderSide: const BorderSide(color: Colors.white, width: 1.4),
+                ),
+              ),
+              onTap: () {
+                if (!planningRoute) {
+                  setState(() => planningRoute = true);
+                }
+              },
+              onChanged: (_) => setState(() {
+                destinationPoint = null;
+                route = [];
+                fares = [];
+                distanceKm = null;
+                error = null;
+                info = null;
+              }),
+              onSubmitted: (_) {
+                setState(() => planningRoute = true);
+                getRouteAndFares();
+              },
+            ),
+            if (!planningRoute) ...[
+              const SizedBox(height: 16),
+              Material(
+                color: const Color(0xFF202020),
+                borderRadius: BorderRadius.circular(18),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () async {
+                    setState(() {
+                      planningRoute = true;
+                      error = null;
+                    });
+                    if (pickupPoint == null) {
+                      await locatePickup();
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          height: 52,
+                          width: 52,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2B2B2B),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.history, size: 25),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                pickup.text.trim().isEmpty
+                                    ? 'Set your pickup'
+                                    : pickup.text.trim(),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              const Text(
+                                'Pickup location',
+                                style: TextStyle(color: Color(0xFFB8B8B8)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right, color: Color(0xFFAAAAAA)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2E5DF),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Your town. Your ride.',
+                            style: TextStyle(
+                              color: Color(0xFF161616),
+                              fontSize: 21,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'See your route and compare upfront fare estimates.',
+                            style: TextStyle(
+                              color: Color(0xFF3A3A3A),
+                              height: 1.3,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E1E1E),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
+                            ),
+                            onPressed: () => setState(() {
+                              planningRoute = true;
+                              preferredCategory = null;
+                            }),
+                            child: const Text('Plan a ride'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      height: 116,
+                      width: 90,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE3D0C6),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Icon(
+                        Icons.route_rounded,
+                        color: Color(0xFF1E1E1E),
+                        size: 66,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 26),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'For you',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Compare all ride types',
+                    onPressed: () => setState(() {
+                      planningRoute = true;
+                      preferredCategory = null;
+                    }),
+                    icon: const Icon(Icons.arrow_forward),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 0.89,
+                children: [
+                  serviceTile(
+                    icon: Icons.electric_rickshaw,
+                    label: 'Auto',
+                    onTap: () => chooseCategory('AUTO'),
+                  ),
+                  serviceTile(
+                    icon: Icons.directions_car_filled,
+                    label: 'Mini',
+                    onTap: () => chooseCategory('MINI'),
+                  ),
+                  serviceTile(
+                    icon: Icons.local_taxi,
+                    label: 'Sedan',
+                    onTap: () => chooseCategory('SEDAN'),
+                  ),
+                  serviceTile(
+                    icon: Icons.bookmark_outline,
+                    label: 'Saved places',
+                    onTap: () => openSection('saved'),
+                  ),
+                  serviceTile(
+                    icon: Icons.receipt_long_outlined,
+                    label: 'Activity',
+                    onTap: () => openSection('history'),
+                  ),
+                  serviceTile(
+                    icon: Icons.support_agent,
+                    label: 'Support',
+                    onTap: () => openSection('support'),
+                  ),
+                ],
+              ),
+            ] else ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Back to home',
+                    onPressed: () => setState(() {
+                      planningRoute = false;
+                      choosePickup = false;
+                    }),
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Plan your ride',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (preferredCategory != null)
+                    TextButton(
+                      onPressed: () => setState(() => preferredCategory = null),
+                      child: const Text('All rides'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('pickup-search'),
+                controller: pickup,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  labelText: 'Pickup location',
+                  hintText: 'Enter a pickup or use your location',
+                  prefixIcon: const Icon(Icons.trip_origin),
+                  suffixIcon: IconButton(
+                    tooltip: 'Search pickup',
+                    onPressed: busy ? null : () => searchAddress(forPickup: true),
+                    icon: const Icon(Icons.search),
+                  ),
+                ),
+                onChanged: (_) => setState(() {
+                  pickupPoint = null;
+                  route = [];
+                  fares = [];
+                  distanceKm = null;
+                  error = null;
+                  info = null;
+                }),
+                onSubmitted: (_) => searchAddress(forPickup: true),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: locating ? null : locatePickup,
+                      icon: locating
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.my_location),
+                      label: const Text('Use my location'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => setState(() {
+                        choosePickup = true;
+                        info = 'Tap the map to choose your pickup.';
+                      }),
+                      icon: const Icon(Icons.touch_app),
+                      label: const Text('Set pickup on map'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: SizedBox(
+                  height: 260,
+                  child: FlutterMap(
+                    mapController: mapController,
+                    options: MapOptions(
+                      initialCenter: center,
+                      initialZoom: 11,
+                      onTap: _mapTap,
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate: _tileUrl,
+                        userAgentPackageName: 'com.goride.customer',
+                        maxZoom: 19,
+                      ),
+                      if (route.isNotEmpty)
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: route,
+                              color: Colors.white,
+                              strokeWidth: 5,
+                            ),
+                          ],
+                        ),
+                      MarkerLayer(
+                        markers: [
+                          if (pickupPoint != null)
+                            Marker(
+                              point: ll.LatLng(
+                                pickupPoint!.latitude,
+                                pickupPoint!.longitude,
+                              ),
+                              width: 42,
+                              height: 42,
+                              child: const Icon(
+                                Icons.trip_origin,
+                                color: Color(0xFFB9D5CE),
+                                size: 32,
+                              ),
+                            ),
+                          if (destinationPoint != null)
+                            Marker(
+                              point: ll.LatLng(
+                                destinationPoint!.latitude,
+                                destinationPoint!.longitude,
+                              ),
+                              width: 42,
+                              height: 42,
+                              child: const Icon(
+                                Icons.location_pin,
+                                color: Colors.white,
+                                size: 40,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const RichAttributionWidget(
+                        attributions: [
+                          TextSourceAttribution('© OpenStreetMap contributors'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: busy ? null : getRouteAndFares,
+                icon: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.route),
+                label: Text(
+                  busy ? 'Finding route…' : 'Show route and fares',
+                ),
+              ),
+            ],
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Message(text: error!, isError: true),
+            ],
+            if (info != null) ...[
+              const SizedBox(height: 10),
+              Message(text: info!),
+            ],
+            if (distanceKm != null && planningRoute)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.route),
+                  title: Text('${distanceKm!.toStringAsFixed(1)} km by road'),
+                  subtitle: Text(
+                    'Estimated travel time ${((routeSeconds ?? 0) / 60).ceil()} min',
+                  ),
+                ),
+              ),
+            if (visibleFares.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Choose a ride',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (preferredCategory != null)
+                    TextButton(
+                      onPressed: () => setState(() => preferredCategory = null),
+                      child: const Text('Compare all'),
+                    ),
+                ],
+              ),
+              for (final fare in visibleFares)
+                Card(
+                  color: const Color(0xFF202020),
+                  child: ListTile(
+                    leading: Icon(
+                      fare.category == 'AUTO'
+                          ? Icons.electric_rickshaw
+                          : fare.category == 'MINI'
+                              ? Icons.directions_car_filled
+                              : Icons.local_taxi,
+                      size: 30,
+                    ),
+                    title: Text(fare.category),
+                    subtitle: Text(
+                      'Estimated arrival ${(fare.etaSeconds / 60).ceil()} min · route ${distanceKm!.toStringAsFixed(1)} km',
+                    ),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${fare.currency} ${(fare.amountMinor / 100).toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const Text('Book', style: TextStyle(color: Color(0xFFB9D5CE))),
+                      ],
+                    ),
+                    onTap: () => book(fare),
+                  ),
+                ),
+            ],
+            if (preferredCategory != null &&
+                fares.isNotEmpty &&
+                visibleFares.isEmpty)
+              Message(
+                text: 'This ride type is not available for the selected route. Compare all rides instead.',
+                isError: true,
+              ),
+            if (planningRoute)
+              const Padding(
+                padding: EdgeInsets.only(top: 14),
+                child: Text(
+                  'Map data © OpenStreetMap contributors. Routing and address-search endpoints are public development defaults; configure a production provider before launch.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF999999)),
+                ),
+              ),
           ],
         ),
-        const SizedBox(height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: SizedBox(
-            height: 260,
-            child: FlutterMap(
-              mapController: mapController,
-              options: MapOptions(initialCenter: center, initialZoom: 11, onTap: _mapTap),
-              children: [
-                TileLayer(
-                  urlTemplate: _tileUrl,
-                  userAgentPackageName: 'com.goride.customer',
-                  maxZoom: 19,
-                ),
-                if (route.isNotEmpty)
-                  PolylineLayer(polylines: [
-                    Polyline(points: route, color: Colors.white, strokeWidth: 5),
-                  ]),
-                MarkerLayer(markers: [
-                  if (pickupPoint != null)
-                    Marker(
-                      point: ll.LatLng(pickupPoint!.latitude, pickupPoint!.longitude),
-                      width: 42,
-                      height: 42,
-                      child: const Icon(Icons.trip_origin, color: Color(0xFFB9D5CE), size: 32),
-                    ),
-                  if (destinationPoint != null)
-                    Marker(
-                      point: ll.LatLng(destinationPoint!.latitude, destinationPoint!.longitude),
-                      width: 42,
-                      height: 42,
-                      child: const Icon(Icons.location_pin, color: Colors.white, size: 40),
-                    ),
-                ]),
-                RichAttributionWidget(attributions: [
-                  TextSourceAttribution('© OpenStreetMap contributors'),
-                  
-                ]),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: busy ? null : getRouteAndFares,
-          icon: busy
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.route),
-          label: Text(busy ? 'Finding route…' : 'Show route and fares'),
-        ),
-        if(error!=null) Message(text:error!,isError:true),
-        if(info!=null) Message(text:info!),
-        if(distanceKm!=null) Card(child:ListTile(leading:const Icon(Icons.route,color:Color(0xFF087E72)),title:Text('${distanceKm!.toStringAsFixed(1)} km by road'),subtitle:Text('Estimated travel time ${((routeSeconds??0)/60).ceil()} min'))),
-        if(fares.isNotEmpty) ...[
-          const SizedBox(height:6),const Text('Choose a ride',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),
-          for(final fare in fares) Card(child:ListTile(
-            leading:Icon(fare.category=='AUTO'?Icons.electric_rickshaw:fare.category=='MINI'?Icons.directions_car_filled:Icons.local_taxi,color:const Color(0xFF087E72),size:30),
-            title:Text(fare.category),subtitle:Text('Estimated · ${((fare.etaSeconds)/60).ceil()} min · route ${distanceKm!.toStringAsFixed(1)} km'),
-            trailing:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.end,children:[Text('${fare.currency} ${(fare.amountMinor/100).toStringAsFixed(0)}',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),const Text('Book',style:TextStyle(color:Color(0xFF087E72)))]),
-            onTap:()=>book(fare),
-          )),
-        ],
-        const SizedBox(height:12),
-        const Text('Map data © OpenStreetMap contributors. Public map, routing and address-search endpoints are development defaults, not guaranteed production infrastructure.',style:TextStyle(fontSize:11,color:Colors.black54)),
-      ])),
+      ),
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF151515),
         indicatorColor: const Color(0xFF343434),
         selectedIndex: 0,
         onDestinationSelected: (index) {
-          if (index == 0) return;
+          if (index == 0) {
+            setState(() => planningRoute = false);
+            return;
+          }
           if (index == 2 || index == 3) {
-            Navigator.of(context).push<void>(MaterialPageRoute<void>(
-              builder: (_) => CustomerSectionScreen(
-                section: index == 2 ? 'history' : 'profile',
-                backendReady: widget.backendReady,
-              ),
-            ));
+            openSection(index == 2 ? 'history' : 'profile');
             return;
           }
           showModalBottomSheet<void>(
@@ -554,20 +1039,34 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Ride services', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Ride services',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 8),
                     if (fares.isEmpty)
-                      const Text('Enter a pickup and destination, then show the route and fares to view available ride types. Go-Ride only displays prices returned by its fare service.'),
+                      const Text(
+                        'Enter a destination and get fares to view available ride types. Prices shown here come from the fare service.',
+                      ),
                     for (final fare in fares)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(
-                          fare.category == 'AUTO' ? Icons.electric_rickshaw : fare.category == 'MINI' ? Icons.directions_car_filled : Icons.local_taxi,
+                          fare.category == 'AUTO'
+                              ? Icons.electric_rickshaw
+                              : fare.category == 'MINI'
+                                  ? Icons.directions_car_filled
+                                  : Icons.local_taxi,
                           size: 30,
                         ),
                         title: Text(fare.category),
-                        subtitle: Text('Estimated arrival ${(fare.etaSeconds / 60).ceil()} min'),
-                        trailing: Text('${fare.currency} ${(fare.amountMinor / 100).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(
+                          'Estimated arrival ${(fare.etaSeconds / 60).ceil()} min',
+                        ),
+                        trailing: Text(
+                          '${fare.currency} ${(fare.amountMinor / 100).toStringAsFixed(0)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         onTap: () {
                           Navigator.of(sheetContext).pop();
                           book(fare);
@@ -580,10 +1079,26 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
           );
         },
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'Services'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Activity'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Account'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.grid_view_outlined),
+            selectedIcon: Icon(Icons.grid_view),
+            label: 'Services',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Activity',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Account',
+          ),
         ],
       ),
     );
