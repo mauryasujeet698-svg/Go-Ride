@@ -279,7 +279,6 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
         destinationPoint = selected.point;
         destination.text = selected.label;
       }
-      if (a == null || b == null) throw Exception('Choose valid pickup and destination places.');
       final uri = Uri.parse('$_osrm/route/v1/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}').replace(queryParameters: {'overview':'full','geometries':'geojson','steps':'false'});
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) throw Exception('Route service is unavailable. Try again later.');
