@@ -408,12 +408,14 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
               icon: const Icon(Icons.arrow_forward),
             ),
           ),
-          onChanged: (_) {
+          onChanged: (_) => setState(() {
             destinationPoint = null;
             route = [];
             fares = [];
             distanceKm = null;
-          },
+            error = null;
+            info = null;
+          }),
           onSubmitted: (_) => getRouteAndFares(),
         ),
         const SizedBox(height: 10),
@@ -429,12 +431,14 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
               icon: const Icon(Icons.search),
             ),
           ),
-          onChanged: (_) {
+          onChanged: (_) => setState(() {
             pickupPoint = null;
             route = [];
             fares = [];
             distanceKm = null;
-          },
+            error = null;
+            info = null;
+          }),
           onSubmitted: (_) => searchAddress(forPickup: true),
         ),
         const SizedBox(height: 10),
