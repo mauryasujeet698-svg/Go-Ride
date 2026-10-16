@@ -52,12 +52,13 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
-    expect(find.text('EXPLORE'), findsOneWidget);
     expect(find.text('Where would you like to go?'), findsOneWidget);
+    expect(find.text('Where to?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('destination-search')));
+    await tester.pump();
     expect(find.text('Pickup location'), findsOneWidget);
     expect(find.text('Destination'), findsOneWidget);
     expect(find.text('Show route and fares'), findsOneWidget);
-    expect(find.textContaining('without signing in'), findsOneWidget);
   });
 
   testWidgets('guest screen does not show demo ride confirmations', (tester) async {
@@ -68,6 +69,9 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
     expect(find.textContaining('Preview only'), findsNothing);
     expect(find.textContaining('no ride or payment will be created'), findsNothing);
+    expect(find.text('Plan a ride'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('destination-search')));
+    await tester.pump();
     expect(find.text('Show route and fares'), findsOneWidget);
   });
 
