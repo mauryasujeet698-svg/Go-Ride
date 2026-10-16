@@ -54,7 +54,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: PreviewHomeScreen(backendReady: false)));
     expect(find.text('Where would you like to go?'), findsOneWidget);
     expect(find.text('Where to?'), findsOneWidget);
-    expect(find.textContaining('without signing in'), findsOneWidget);
+    expect(find.textContaining('Search a destination'), findsOneWidget);
     await tester.tap(find.byKey(const Key('destination-search')));
     await tester.pump();
     expect(find.text('Pickup location'), findsOneWidget);
