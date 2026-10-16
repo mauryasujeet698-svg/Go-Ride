@@ -768,8 +768,21 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
   }
 
   Future<void> restoreRide() async {
-    try { final r = await backend.activeRide(); if (!mounted || r == null) return; setState(() => ride = r); watchRide(r); }
-    catch (_) { if (mounted) setState(() => notice = 'Could not restore the previous ride.'); }
+    try {
+      final r = await backend.activeRide();
+      if (!mounted || r == null) return;
+      setState(() {
+        ride = r;
+        pickup = r.pickup;
+        destination = r.destination;
+        pickupText.text = '${r.pickup.latitude.toStringAsFixed(5)}, ${r.pickup.longitude.toStringAsFixed(5)}';
+        destinationText.text = '${r.destination.latitude.toStringAsFixed(5)}, ${r.destination.longitude.toStringAsFixed(5)}';
+      });
+      watchRide(r);
+      await _loadRouteShape();
+    } catch (_) {
+      if (mounted) setState(() => notice = 'Could not restore the previous ride.');
+    }
   }
 
   Future<void> locate() async {
@@ -982,7 +995,20 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
         TextField(controller: pickupText, readOnly: true, decoration: InputDecoration(labelText: 'Pickup location', prefixIcon: const Icon(Icons.my_location),
           suffixIcon: IconButton(onPressed: locating ? null : locate, icon: locating ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh)))),
         const SizedBox(height: 12),
-        TextField(controller: destinationText, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Where to?', prefixIcon: Icon(Icons.location_on_outlined), hintText: 'Enter destination address')),
+        TextField(
+          controller: destinationText,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Where to?', prefixIcon: Icon(Icons.location_on_outlined), hintText: 'Enter destination address'),
+          onSubmitted: (_) => estimate(),
+          onChanged: (_) {
+            setState(() {
+              destination = null;
+              quotes = [];
+              routePoints = [];
+              notice = null;
+            });
+          },
+        ),
         const SizedBox(height: 14),
         FilledButton.icon(onPressed: busy ? null : estimate, icon: const Icon(Icons.local_taxi), label: Text(busy ? 'Please wait…' : 'Get fares')),
         if (quotes.isNotEmpty) ...[
@@ -998,6 +1024,58 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
       const SizedBox(height: 18),
       const Text('Location is used to set your pickup and estimate the trip. Permission is requested only when needed.', style: TextStyle(color: Colors.black54, fontSize: 12)),
     ]))),
+    bottomNavigationBar: NavigationBar(
+      backgroundColor: const Color(0xFF151515),
+      indicatorColor: const Color(0xFF343434),
+      selectedIndex: 0,
+      onDestinationSelected: (index) {
+        if (index == 0) return;
+        if (index == 2 || index == 3) {
+          Navigator.of(context).push<void>(MaterialPageRoute<void>(
+            builder: (_) => CustomerSectionScreen(section: index == 2 ? 'history' : 'profile'),
+          ));
+          return;
+        }
+        showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          backgroundColor: const Color(0xFF202020),
+          builder: (sheetContext) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Ride services', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  if (quotes.isEmpty)
+                    const Text('Enter a destination and get fares to view available ride types. Prices shown here come from the live fare service.'),
+                  for (final q in quotes)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(categoryIcon(q.category), size: 30),
+                      title: Text(q.category),
+                      subtitle: Text('Estimated arrival ${(q.etaSeconds / 60).ceil()} min'),
+                      trailing: Text('${q.currency} ${(q.amountMinor / 100).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        book(q);
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      destinations: const [
+        NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+        NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'Services'),
+        NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Activity'),
+        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Account'),
+      ],
+    ),
   );
 
   String statusLabel(String status) => switch (status) {
