@@ -38,9 +38,58 @@ class GoRideApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF087E72)),
-      scaffoldBackgroundColor: const Color(0xFFF5F7F8),
-      inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFFFFFFFF),
+        brightness: Brightness.dark,
+      ).copyWith(
+        primary: Colors.white,
+        onPrimary: Colors.black,
+        secondary: const Color(0xFFB9D5CE),
+        surface: const Color(0xFF202020),
+      ),
+      scaffoldBackgroundColor: const Color(0xFF101010),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF101010),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
+      ),
+      inputDecorationTheme: const InputDecorationTheme(
+        filled: true,
+        fillColor: Color(0xFF252525),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Color(0xFF454545)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Colors.white, width: 1.5),
+        ),
+        labelStyle: TextStyle(color: Color(0xFFBBBBBB)),
+        hintStyle: TextStyle(color: Color(0xFF888888)),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
+          shape: const StadiumBorder(),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: Color(0xFF555555)),
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        ),
+      ),
     ),
     home: AuthGate(backendReady: backendReady),
   );
@@ -92,7 +141,7 @@ class PreviewHomeScreen extends StatefulWidget {
 }
 
 class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
-  static const _tileUrl = String.fromEnvironment('OSM_TILE_URL', defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+  static const _tileUrl = String.fromEnvironment('OSM_TILE_URL', defaultValue: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png');
   static const _nominatim = String.fromEnvironment('GEOCODER_URL', defaultValue: 'https://nominatim.openstreetmap.org');
   static const _osrm = String.fromEnvironment('ROUTING_URL', defaultValue: 'https://router.project-osrm.org');
   final pickup = TextEditingController();
@@ -134,7 +183,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
     if (query.isEmpty) { setState(() => error = 'Enter an address to search.'); return; }
     setState(() { busy = true; error = null; });
     try {
-      final uri = Uri.parse('$_nominatim/search').replace(queryParameters: {'q': query, 'format':'jsonv2', 'limit':'5', 'addressdetails':'1'});
+      final uri = Uri.parse('$_nominatim/search').replace(queryParameters: {'q': query, 'format':'jsonv2', 'limit':'5', 'addressdetails':'1', 'countrycodes':'in'});
       final response = await http.get(uri, headers: {'User-Agent':'GoRideCustomer/0.1'}).timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) throw Exception('Address search is temporarily unavailable. Try again shortly.');
       final rows = (jsonDecode(response.body) as List).cast<Map<String,dynamic>>();
@@ -175,15 +224,69 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
     if (pickupPoint != null && destinationPoint != null) getRouteAndFares();
   }
 
+  Future<PlaceResult> _resolveTypedPlace(String raw) async {
+    final query = raw.trim();
+    if (query.isEmpty) throw Exception('Enter both a pickup and destination.');
+    final withCountry = RegExp(r'\\bIndia\\b', caseSensitive: false).hasMatch(query)
+        ? query : '$query, India';
+    final uri = Uri.parse('$_nominatim/search').replace(queryParameters: {
+      'q': withCountry,
+      'format': 'jsonv2',
+      'limit': '5',
+      'addressdetails': '1',
+      'countrycodes': 'in',
+    });
+    final response = await http.get(
+      uri,
+      headers: {'User-Agent': 'GoRideCustomer/1.0 (support: app)'},
+    ).timeout(const Duration(seconds: 12));
+    if (response.statusCode != 200) {
+      throw Exception('Address search is temporarily unavailable. Try again shortly.');
+    }
+    final rows = (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+    if (rows.isEmpty) throw Exception('No matching place found for "$query". Add the nearby town or district.');
+    final place = rows.first;
+    return PlaceResult(
+      label: place['display_name']?.toString() ?? query,
+      point: GeoPoint(
+        double.parse(place['lat'].toString()),
+        double.parse(place['lon'].toString()),
+      ),
+    );
+  }
+
   Future<void> getRouteAndFares() async {
-    final a = pickupPoint, b = destinationPoint;
-    if (a == null || b == null) { setState(() => error = 'Set both pickup and destination first.'); return; }
+    FocusScope.of(context).unfocus();
+    if (pickup.text.trim().isEmpty || destination.text.trim().isEmpty) {
+      setState(() => error = 'Enter both pickup and destination first.');
+      return;
+    }
     setState(() { busy = true; error = null; info = null; fares = []; });
     try {
+      // Text entered by the customer is a valid input; it must not require the
+      // customer to separately tap the small search icon before requesting a route.
+      var a = pickupPoint;
+      var b = destinationPoint;
+      if (a == null) {
+        final selected = await _resolveTypedPlace(pickup.text);
+        a = selected.point;
+        pickupPoint = selected.point;
+        pickup.text = selected.label;
+      }
+      if (b == null) {
+        final selected = await _resolveTypedPlace(destination.text);
+        b = selected.point;
+        destinationPoint = selected.point;
+        destination.text = selected.label;
+      }
+      if (a == null || b == null) throw Exception('Choose valid pickup and destination places.');
       final uri = Uri.parse('$_osrm/route/v1/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}').replace(queryParameters: {'overview':'full','geometries':'geojson','steps':'false'});
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) throw Exception('Route service is unavailable. Try again later or choose locations on the map.');
+      if (response.statusCode != 200) throw Exception('Route service is unavailable. Try again later.');
       final data = jsonDecode(response.body) as Map<String,dynamic>;
+      if (data['code'] != null && data['code'] != 'Ok') {
+        throw Exception('No drivable route was found between these places.');
+      }
       final routes = (data['routes'] as List?) ?? [];
       if (routes.isEmpty) throw Exception('No drivable route was found between those locations.');
       final r = Map<String,dynamic>.from(routes.first as Map);
@@ -194,14 +297,56 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
       if (km > 200) throw Exception('This service currently supports trips up to 200 km.');
       List<GuestFare> quotes = [];
       if (widget.backendReady) {
-        final rows = await Supabase.instance.client.rpc('estimate_guest_fares', params: {'p_distance_km':km, 'p_eta_seconds':secs});
-        quotes = (rows as List).map((x) { final m=Map<String,dynamic>.from(x as Map); return GuestFare(category:m['category'].toString(), amountMinor:(m['amount_minor'] as num).toInt(), currency:m['currency'].toString().trim(), etaSeconds:(m['eta_seconds'] as num).toInt()); }).toList();
+        // Guest fare RPC execution is intentionally revoked for client roles.
+        // Call the hardened Edge Function, which invokes the RPC server-side.
+        final fareResponse = await Supabase.instance.client.functions.invoke(
+          'estimate-route-fares',
+          body: {
+            'pickup': {'latitude': a.latitude, 'longitude': a.longitude},
+            'destination': {'latitude': b.latitude, 'longitude': b.longitude},
+          },
+        );
+        final payload = Map<String, dynamic>.from(fareResponse.data as Map);
+        final rawFares = payload['fares'];
+        if (fareResponse.status < 200 || fareResponse.status >= 300 || rawFares is! List) {
+          final code = payload['error']?.toString() ?? 'fare_estimate_unavailable';
+          throw Exception(switch (code) {
+            'trip_too_long' => 'This service currently supports trips up to 200 km.',
+            'routing_unavailable' => 'Fare routing is temporarily unavailable. Try again shortly.',
+            'server_configuration_missing' => 'Fare service setup is incomplete. Please try again later.',
+            _ => 'Fare estimates are temporarily unavailable. Please try again shortly.',
+          });
+        }
+        quotes = rawFares.map((x) {
+          final m = Map<String, dynamic>.from(x as Map);
+          return GuestFare(
+            category: m['category'].toString(),
+            amountMinor: (m['amount_minor'] as num).toInt(),
+            currency: m['currency'].toString().trim(),
+            etaSeconds: (m['eta_seconds'] as num).toInt(),
+          );
+        }).toList();
       }
       if (!mounted) return;
-      setState(() { route=points; distanceKm=km; routeSeconds=secs; fares=quotes; info=quotes.isEmpty ? 'Route found. Fare estimates are temporarily unavailable; no prices have been invented.' : 'Route and estimates use configured services. Booking will revalidate the fare after sign-in.'; });
-      if (points.isNotEmpty) mapController.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(44)));
-    } catch (e) { if (mounted) setState(() => error=e.toString().replaceFirst('Exception: ','')); }
-    finally { if (mounted) setState(() => busy=false); }
+      setState(() {
+        route = points;
+        distanceKm = km;
+        routeSeconds = secs;
+        fares = quotes;
+        info = quotes.isEmpty
+          ? 'Route found. Fare estimates are temporarily unavailable; no prices have been invented.'
+          : 'Choose a ride to continue. Fare and driver availability are rechecked before booking.';
+      });
+      if (points.isNotEmpty) {
+        mapController.fitCamera(
+          CameraFit.bounds(bounds: LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(44)),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
 
   Future<void> book(GuestFare fare) async {
@@ -213,7 +358,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final center = pickupPoint != null ? ll.LatLng(pickupPoint!.latitude,pickupPoint!.longitude) : const ll.LatLng(20.5937,78.9629);
+    final center = pickupPoint != null ? ll.LatLng(pickupPoint!.latitude,pickupPoint!.longitude) : const ll.LatLng(25.89,81.99);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Go-Ride'),
@@ -251,21 +396,24 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
         const SizedBox(height:6),
         const Text('Explore routes and fare estimates without signing in. Sign-in is required only to request a real ride.'),
         const SizedBox(height:14),
-        ClipRRect(borderRadius:BorderRadius.circular(18), child:SizedBox(height:300, child: FlutterMap(mapController:mapController, options:MapOptions(initialCenter:center,initialZoom:4,onTap:_mapTap), children:[
+        ClipRRect(borderRadius:BorderRadius.circular(22), child:SizedBox(height:300, child: FlutterMap(mapController:mapController, options:MapOptions(initialCenter:center,initialZoom:11,onTap:_mapTap), children:[
           TileLayer(urlTemplate:_tileUrl,userAgentPackageName:'com.goride.customer', maxZoom:19),
           if (route.isNotEmpty) PolylineLayer(polylines:[Polyline(points:route,color:const Color(0xFF087E72),strokeWidth:5)]),
           MarkerLayer(markers:[
             if(pickupPoint!=null) Marker(point:ll.LatLng(pickupPoint!.latitude,pickupPoint!.longitude),width:42,height:42,child:const Icon(Icons.trip_origin,color:Color(0xFF087E72),size:32)),
             if(destinationPoint!=null) Marker(point:ll.LatLng(destinationPoint!.latitude,destinationPoint!.longitude),width:42,height:42,child:const Icon(Icons.location_pin,color:Colors.red,size:40)),
           ]),
-          RichAttributionWidget(attributions:[TextSourceAttribution('© OpenStreetMap contributors')]),
+          RichAttributionWidget(attributions:[
+            TextSourceAttribution('© OpenStreetMap contributors'),
+            TextSourceAttribution('© CARTO'),
+          ]),
         ]))),
         const SizedBox(height:8),
         Row(children:[Expanded(child:OutlinedButton.icon(onPressed:locating?null:locatePickup,icon:locating?const SizedBox(width:16,height:16,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.my_location),label:const Text('Use my location'))),const SizedBox(width:8),Expanded(child:OutlinedButton.icon(onPressed:()=>setState(()=>choosePickup=true),icon:const Icon(Icons.touch_app),label:const Text('Tap map to set pickup')))]),
         const SizedBox(height:12),
-        TextField(controller:pickup,textCapitalization:TextCapitalization.words,decoration:InputDecoration(labelText:'Pickup location',prefixIcon:const Icon(Icons.trip_origin),suffixIcon:IconButton(tooltip:'Search pickup',onPressed:busy?null:()=>searchAddress(forPickup:true),icon:const Icon(Icons.search))),onSubmitted:(_)=>searchAddress(forPickup:true)),
+        TextField(controller:pickup,textCapitalization:TextCapitalization.words,decoration:InputDecoration(labelText:'Pickup location',prefixIcon:const Icon(Icons.trip_origin),suffixIcon:IconButton(tooltip:'Search pickup',onPressed:busy?null:()=>searchAddress(forPickup:true),icon:const Icon(Icons.search))),onChanged:(_) { pickupPoint=null; route=[]; fares=[]; distanceKm=null; },onSubmitted:(_)=>searchAddress(forPickup:true)),
         const SizedBox(height:10),
-        TextField(controller:destination,textCapitalization:TextCapitalization.words,decoration:InputDecoration(labelText:'Destination',hintText:'Search address or tap map',prefixIcon:const Icon(Icons.location_on_outlined),suffixIcon:IconButton(tooltip:'Search destination',onPressed:busy?null:()=>searchAddress(forPickup:false),icon:const Icon(Icons.search))),onSubmitted:(_)=>searchAddress(forPickup:false)),
+        TextField(controller:destination,textCapitalization:TextCapitalization.words,decoration:InputDecoration(labelText:'Destination',hintText:'Search address or tap map',prefixIcon:const Icon(Icons.location_on_outlined),suffixIcon:IconButton(tooltip:'Search destination',onPressed:busy?null:()=>searchAddress(forPickup:false),icon:const Icon(Icons.search))),onChanged:(_) { destinationPoint=null; route=[]; fares=[]; distanceKm=null; },onSubmitted:(_)=>searchAddress(forPickup:false)),
         const SizedBox(height:12),
         FilledButton.icon(onPressed:busy?null:getRouteAndFares,icon:busy?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.route),label:Text(busy?'Finding route…':'Show route and fares')),
         if(error!=null) Message(text:error!,isError:true),
