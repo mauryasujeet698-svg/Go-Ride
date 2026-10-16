@@ -524,6 +524,64 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
         const SizedBox(height:12),
         const Text('Map data © OpenStreetMap contributors. Public map, routing and address-search endpoints are development defaults, not guaranteed production infrastructure.',style:TextStyle(fontSize:11,color:Colors.black54)),
       ])),
+      bottomNavigationBar: NavigationBar(
+        backgroundColor: const Color(0xFF151515),
+        indicatorColor: const Color(0xFF343434),
+        selectedIndex: 0,
+        onDestinationSelected: (index) {
+          if (index == 0) return;
+          if (index == 2 || index == 3) {
+            Navigator.of(context).push<void>(MaterialPageRoute<void>(
+              builder: (_) => CustomerSectionScreen(
+                section: index == 2 ? 'history' : 'profile',
+                backendReady: widget.backendReady,
+              ),
+            ));
+            return;
+          }
+          showModalBottomSheet<void>(
+            context: context,
+            showDragHandle: true,
+            backgroundColor: const Color(0xFF202020),
+            builder: (sheetContext) => SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Ride services', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    if (fares.isEmpty)
+                      const Text('Enter a pickup and destination, then show the route and fares to view available ride types. Go-Ride only displays prices returned by its fare service.'),
+                    for (final fare in fares)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          fare.category == 'AUTO' ? Icons.electric_rickshaw : fare.category == 'MINI' ? Icons.directions_car_filled : Icons.local_taxi,
+                          size: 30,
+                        ),
+                        title: Text(fare.category),
+                        subtitle: Text('Estimated arrival ${(fare.etaSeconds / 60).ceil()} min'),
+                        trailing: Text('${fare.currency} ${(fare.amountMinor / 100).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          book(fare);
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'Services'),
+          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Activity'),
+          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Account'),
+        ],
+      ),
     );
   }
 }
