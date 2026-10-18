@@ -11,11 +11,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/app_config.dart';
 import 'data/ride_backend.dart';
 
-final ValueNotifier<ThemeMode> appThemeMode = ValueNotifier<ThemeMode>(ThemeMode.dark);
+final ValueNotifier<ThemeMode> appThemeMode = ValueNotifier<ThemeMode>(ThemeMode.light);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try { final prefs = await SharedPreferences.getInstance(); appThemeMode.value = switch (prefs.getString('go_ride_theme') ?? 'dark') { 'light' => ThemeMode.light, 'system' => ThemeMode.system, _ => ThemeMode.dark }; } catch (_) {}
+  try { final prefs = await SharedPreferences.getInstance(); appThemeMode.value = switch (prefs.getString('go_ride_theme') ?? 'light') { 'light' => ThemeMode.light, 'system' => ThemeMode.system, _ => ThemeMode.dark }; } catch (_) {}
   var backendReady = false;
   try {
     await Supabase.initialize(
@@ -399,7 +399,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
       required VoidCallback onTap,
     }) {
       return Material(
-        color: const Color(0xFF1A1A1A),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
@@ -423,7 +423,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                  style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
                 ),
               ],
             ),
@@ -549,18 +549,18 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                   vertical: 19,
                 ),
                 filled: true,
-                fillColor: const Color(0xFF252525),
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(32),
                   borderSide: BorderSide.none,
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(32),
-                  borderSide: const BorderSide(color: Color(0xFF3D3D3D)),
+                  borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(32),
-                  borderSide: const BorderSide(color: Colors.white, width: 1.4),
+                  borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.4),
                 ),
               ),
               onTap: () {
@@ -584,7 +584,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
             if (!planningRoute) ...[
               const SizedBox(height: 16),
               Material(
-                color: const Color(0xFF202020),
+                color: Theme.of(context).colorScheme.surfaceContainer,
                 borderRadius: BorderRadius.circular(18),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(18),
@@ -608,7 +608,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                           height: 52,
                           width: 52,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2B2B2B),
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: const Icon(Icons.history, size: 25),
@@ -637,7 +637,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFFAAAAAA)),
+                        Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ],
                     ),
                   ),
@@ -878,7 +878,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                           polylines: [
                             Polyline(
                               points: route,
-                              color: Colors.white,
+                              color: Theme.of(context).colorScheme.primary,
                               strokeWidth: 5,
                             ),
                           ],
@@ -909,7 +909,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                               height: 42,
                               child: const Icon(
                                 Icons.location_pin,
-                                color: Colors.white,
+                                color: Theme.of(context).colorScheme.primary,
                                 size: 40,
                               ),
                             ),
@@ -976,7 +976,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
               ),
               for (final fare in visibleFares)
                 Card(
-                  color: const Color(0xFF202020),
+                  color: Theme.of(context).colorScheme.surfaceContainer,
                   child: ListTile(
                     leading: Icon(
                       fare.category == 'BIKE'
@@ -1029,8 +1029,8 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        backgroundColor: const Color(0xFF151515),
-        indicatorColor: const Color(0xFF343434),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        indicatorColor: Theme.of(context).colorScheme.secondaryContainer,
         selectedIndex: 0,
         onDestinationSelected: (index) {
           if (index == 0) {
@@ -1042,7 +1042,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
           showModalBottomSheet<void>(
             context: context,
             showDragHandle: true,
-            backgroundColor: const Color(0xFF202020),
+            backgroundColor: Theme.of(context).colorScheme.surface,
             builder: (sheetContext) => SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
