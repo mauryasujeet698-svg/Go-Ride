@@ -1094,22 +1094,18 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
         destinations: [
           const NavigationDestination(
             icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_outlined),
             label: 'Home',
           ),
           const NavigationDestination(
             icon: Icon(Icons.grid_view_outlined),
-            selectedIcon: Icon(Icons.grid_view),
             label: 'Services',
           ),
           const NavigationDestination(
             icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
             label: 'Parcel',
           ),
           const NavigationDestination(
             icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
             label: 'Account',
           ),
         ],
