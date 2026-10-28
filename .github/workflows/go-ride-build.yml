@@ -29,6 +29,8 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: dart format lib test
+      - name: Inspect formatted analyzer location
+        run: nl -ba lib/main.dart | sed -n '1088,1105p'
       - run: flutter analyze --no-fatal-infos
       - run: flutter test --reporter expanded
       - name: Build ABI-split APKs
