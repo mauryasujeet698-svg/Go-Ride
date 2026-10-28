@@ -907,7 +907,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                               ),
                               width: 42,
                               height: 42,
-                              child: const Icon(
+                              child: Icon(
                                 Icons.location_pin,
                                 color: Theme.of(context).colorScheme.primary,
                                 size: 40,
@@ -1091,21 +1091,25 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
             ),
           );
         },
-        destinations: [
-          const NavigationDestination(
+        destinations: const [
+          NavigationDestination(
             icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          const NavigationDestination(
+          NavigationDestination(
             icon: Icon(Icons.grid_view_outlined),
+            selectedIcon: Icon(Icons.grid_view),
             label: 'Services',
           ),
-          const NavigationDestination(
+          NavigationDestination(
             icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
             label: 'Parcel',
           ),
-          const NavigationDestination(
+          NavigationDestination(
             icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
             label: 'Account',
           ),
         ],
