@@ -1091,7 +1091,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
             ),
           );
         },
-        destinations: const [
+        destinations: [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
