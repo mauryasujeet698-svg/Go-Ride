@@ -138,29 +138,34 @@ Future<List<PlaceResult>> geocodePlaces(
   int limit = 5,
 }) async {
   if (mapboxToken.isNotEmpty) {
-    final uri = Uri.parse(
-      'https://api.mapbox.com/geocoding/v5/mapbox.places/${Uri.encodeComponent(query)}.json',
-    ).replace(queryParameters: {
-      'access_token': mapboxToken,
-      'country': 'IN',
-      'language': 'en',
-      'limit': limit.toString(),
-      'autocomplete': 'true',
-    });
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
-    if (response.statusCode != 200) {
-      throw Exception('Mapbox address search is temporarily unavailable. Try again shortly.');
+    try {
+      final uri = Uri.parse(
+        'https://api.mapbox.com/geocoding/v5/mapbox.places/${Uri.encodeComponent(query)}.json',
+      ).replace(queryParameters: {
+        'access_token': mapboxToken,
+        'country': 'IN',
+        'language': 'en',
+        'limit': limit.toString(),
+        'autocomplete': 'true',
+      });
+      final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final payload = jsonDecode(response.body) as Map<String, dynamic>;
+        final features = (payload['features'] as List?) ?? [];
+        if (features.isNotEmpty) {
+          return features.map((item) {
+            final feature = Map<String, dynamic>.from(item as Map);
+            final center = (feature['center'] as List).cast<num>();
+            return PlaceResult(
+              label: feature['place_name']?.toString() ?? query,
+              point: GeoPoint(center[1].toDouble(), center[0].toDouble()),
+            );
+          }).toList();
+        }
+      }
+    } catch (_) {
+      // Fall back to the OSM geocoder if Mapbox is unavailable.
     }
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final features = (payload['features'] as List?) ?? [];
-    return features.map((item) {
-      final feature = Map<String, dynamic>.from(item as Map);
-      final center = (feature['center'] as List).cast<num>();
-      return PlaceResult(
-        label: feature['place_name']?.toString() ?? query,
-        point: GeoPoint(center[1].toDouble(), center[0].toDouble()),
-      );
-    }).toList();
   }
 
   final uri = Uri.parse('$nominatim/search').replace(queryParameters: {
@@ -193,19 +198,25 @@ Future<String?> reverseGeocode(
   required String nominatim,
 }) async {
   if (mapboxToken.isNotEmpty) {
-    final uri = Uri.parse(
-      'https://api.mapbox.com/geocoding/v5/mapbox.places/${point.longitude},${point.latitude}.json',
-    ).replace(queryParameters: {
-      'access_token': mapboxToken,
-      'country': 'IN',
-      'language': 'en',
-      'limit': '1',
-    });
-    final response = await http.get(uri).timeout(const Duration(seconds: 8));
-    if (response.statusCode != 200) return null;
-    final features = ((jsonDecode(response.body) as Map<String, dynamic>)['features'] as List?) ?? [];
-    if (features.isEmpty) return null;
-    return (features.first as Map<String, dynamic>)['place_name']?.toString();
+    try {
+      final uri = Uri.parse(
+        'https://api.mapbox.com/geocoding/v5/mapbox.places/${point.longitude},${point.latitude}.json',
+      ).replace(queryParameters: {
+        'access_token': mapboxToken,
+        'country': 'IN',
+        'language': 'en',
+        'limit': '1',
+      });
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        final features = ((jsonDecode(response.body) as Map<String, dynamic>)['features'] as List?) ?? [];
+        if (features.isNotEmpty) {
+          return (features.first as Map<String, dynamic>)['place_name']?.toString();
+        }
+      }
+    } catch (_) {
+      // Fall back to the OSM reverse geocoder.
+    }
   }
   final uri = Uri.parse('$nominatim/reverse').replace(queryParameters: {
     'format': 'jsonv2',
