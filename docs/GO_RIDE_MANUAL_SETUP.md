@@ -12,6 +12,8 @@ Open **Settings → Secrets and variables → Actions** and add:
 
 The workflow only passes non-empty secrets to Flutter builds. If the Supabase URL/key are absent, the Admin and Driver Partner apps deliberately show a configuration page instead of pretending to be connected.
 
+Also open **Settings → Security analysis** in the GitHub repository and enable the dependency graph. Secret scanning passes, but dependency review currently fails because the dependency graph is disabled.
+
 ## 2. Google OAuth (all three apps)
 
 Enable Google as a provider in Supabase Authentication, configure the Google OAuth client in Google Cloud Console, and add these exact app redirects to Supabase's redirect allow-list:
@@ -83,7 +85,7 @@ Changing a business model does not rewrite past rides. Existing subscriptions re
 
 ## 7. Other integrations that require your decision or credentials
 
-- **Mapbox:** Add the public access token as a GitHub Actions secret. Without it, maps fall back to OpenStreetMap tiles and the existing OSM-based geocoder/router.
+- **Mapbox:** Add the public access token as a GitHub Actions secret and as a Supabase Edge Function secret named `MAPBOX_ACCESS_TOKEN`. When configured, customer maps use Mapbox tiles/geocoding/directions and the trusted route-fare function uses Mapbox Directions; OSM/Nominatim/OSRM remain fallbacks. Restrict the public token to the expected app where supported.
 - **Notifications:** Verify production push credentials, Android package registration and Admin notification delivery. Do not assume customer push delivery proves Admin delivery works.
 - **Payments:** Select a payment provider if you want automated online subscription/commission settlement. Until then, subscription activation is manual and requires a verified payment/receipt reference.
 - **Insurance:** Select an authorised insurer/partner, confirm policy terms and coverage, then integrate real policy issuance/confirmation. The app cannot claim a ride is insured until the partner confirms coverage.
