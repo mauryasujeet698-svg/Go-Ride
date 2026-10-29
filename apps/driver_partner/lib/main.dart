@@ -333,6 +333,8 @@ class _DriverPageState extends State<_DriverPage> {
                   )).toList(),
                   onChanged: _busy ? null : (value) async {
                     if (value == null) return;
+                    if (_isAvailable) await _toggleAvailability(false);
+                    if (!mounted) return;
                     setState(() => _areaId = value);
                     await _run(_refresh);
                   },
