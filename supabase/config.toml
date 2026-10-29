@@ -1,0 +1,4 @@
+project_id = "go-ride"
+
+[functions.estimate-route-fares]
+verify_jwt = false
