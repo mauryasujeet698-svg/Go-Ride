@@ -36,7 +36,13 @@ Deno.serve(async (req: Request) => {
     routeUrl.searchParams.set("overview", "false");
     routeUrl.searchParams.set("steps", "false");
     if (mapboxToken) routeUrl.searchParams.set("access_token", mapboxToken);
-    const routeResponse = await fetch(routeUrl, { signal: AbortSignal.timeout(12000) });
+    let routeResponse = await fetch(routeUrl, { signal: AbortSignal.timeout(12000) });
+    if (!routeResponse.ok && mapboxToken) {
+      const fallbackUrl = new URL(`${routingBase}/route/v1/driving/${pickup.longitude},${pickup.latitude};${destination.longitude},${destination.latitude}`);
+      fallbackUrl.searchParams.set("overview", "false");
+      fallbackUrl.searchParams.set("steps", "false");
+      routeResponse = await fetch(fallbackUrl, { signal: AbortSignal.timeout(12000) });
+    }
     if (!routeResponse.ok) return json({ error: "routing_unavailable" }, 503);
     const routeData = await routeResponse.json();
     const route = routeData?.routes?.[0];
