@@ -528,6 +528,13 @@ class _PlansTabState extends State<_PlansTab> {
     }
   }
 
+  String _areaNameFor(String? id) {
+    for (final area in _areas) {
+      if (area['id'].toString() == id) return _value(area, 'name');
+    }
+    return 'Area';
+  }
+
   Future<void> _editPlan([Map<String, dynamic>? plan]) async {
     if (_areas.isEmpty) {
       _toast(context, 'Create a service area first.');
@@ -575,7 +582,7 @@ class _PlansTabState extends State<_PlansTab> {
                   leading: Icon(plan['active'] == true ? Icons.card_membership : Icons.pause_circle_outline),
                   title: Text(_value(plan, 'name')),
                   subtitle: Text(
-                    _value(_areas.where((a) => a['id'].toString() == plan['area_id'].toString()).firstOrNull ?? {}, 'name') +
+                    _areaNameFor(plan['area_id']?.toString()) +
                     ' · ' + _value(plan, 'currency', 'INR') + ' ' +
                     (((plan['price_minor'] as num?)?.toInt() ?? 0) / 100).toStringAsFixed(2) +
                     ' · ' + (((plan['duration_minutes'] as num?)?.toInt() ?? 1440) / 60).toStringAsFixed(1) + ' hours' +
