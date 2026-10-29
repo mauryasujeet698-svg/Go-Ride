@@ -1207,12 +1207,12 @@ class _OperationsTabState extends State<_OperationsTab> {
             if (!_loading && _applications.isEmpty) const ListTile(title: Text('No driver applications waiting for review.')),
             const Divider(height: 28),
             const Text('Support escalations', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            for (final ticket in _tickets.where((t) => t['needs_human'] == true || t['priority'] == 'urgent'))
+            for (final ticket in _tickets)
               Card(
                 child: ListTile(
                   leading: Icon(ticket['priority'] == 'urgent' ? Icons.warning_amber : Icons.support_agent),
                   title: Text(_value(ticket, 'subject')),
-                  subtitle: Text(_value(ticket, 'message') + '\nStatus: ' + _value(ticket, 'status') + ' · AI attempts: ' + _value(ticket, 'ai_attempt_count', '0')),
+                  subtitle: Text(_value(ticket, 'message') + '\nStatus: ' + _value(ticket, 'status') + ' · Priority: ' + _value(ticket, 'priority', 'normal') + ' · AI attempts: ' + _value(ticket, 'ai_attempt_count', '0') + (ticket['needs_human'] == true ? ' · HUMAN REVIEW' : '')),
                   isThreeLine: true,
                   trailing: PopupMenuButton<String>(
                     onSelected: (_) => _updateTicket(ticket),
@@ -1222,8 +1222,8 @@ class _OperationsTabState extends State<_OperationsTab> {
                   ),
                 ),
               ),
-            if (!_loading && _tickets.where((t) => t['needs_human'] == true || t['priority'] == 'urgent').isEmpty)
-              const ListTile(title: Text('No escalated support tickets.')),
+            if (!_loading && _tickets.isEmpty)
+              const ListTile(title: Text('No support tickets recorded.')),
             const Divider(height: 28),
             const Text('Pending subscriptions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             for (final subscription in _subscriptions)
