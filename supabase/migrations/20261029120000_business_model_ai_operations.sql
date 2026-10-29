@@ -204,6 +204,19 @@ alter table public.support_tickets
   add column if not exists assigned_to uuid references auth.users(id) on delete set null,
   add column if not exists ai_summary text;
 
+
+create table if not exists public.support_ticket_messages (
+  id uuid primary key default gen_random_uuid(),
+  ticket_id uuid not null references public.support_tickets(id) on delete cascade,
+  author_id uuid references auth.users(id) on delete set null,
+  author_type text not null check (author_type in ('customer', 'ai_agent', 'admin', 'system')),
+  content text not null check (char_length(content) between 1 and 5000),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists support_ticket_messages_ticket_created_idx
+  on public.support_ticket_messages(ticket_id, created_at);
+
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -303,6 +316,7 @@ $;
 revoke all on function public.get_ai_daily_metrics(timestamptz,timestamptz) from public, anon, authenticated;
 grant execute on function public.get_ai_daily_metrics(timestamptz,timestamptz) to service_role;
 
+alter table public.support_ticket_messages enable row level security;
 alter table public.app_user_roles enable row level security;
 alter table public.service_areas enable row level security;
 alter table public.area_business_settings enable row level security;
@@ -374,10 +388,22 @@ drop policy if exists audit_events_admin_read on public.audit_events;
 create policy audit_events_admin_read on public.audit_events
 for select to authenticated using (public.has_app_role('admin'));
 
+
+drop policy if exists support_ticket_messages_read_participant on public.support_ticket_messages;
+create policy support_ticket_messages_read_participant on public.support_ticket_messages
+for select to authenticated using (
+  public.has_app_role('admin')
+  or exists (
+    select 1 from public.support_tickets t
+    where t.id = ticket_id and t.user_id = (select auth.uid())
+  )
+);
+
 drop policy if exists support_tickets_admin_read on public.support_tickets;
 create policy support_tickets_admin_read on public.support_tickets
 for select to authenticated using (public.has_app_role('admin') or user_id = (select auth.uid()));
 
+revoke all privileges on public.support_ticket_messages from anon, authenticated;
 revoke all privileges on public.app_user_roles from anon, authenticated;
 revoke all privileges on public.service_areas from anon, authenticated;
 revoke all privileges on public.area_business_settings from anon, authenticated;
@@ -389,6 +415,7 @@ revoke all privileges on public.daily_ai_reports from anon, authenticated;
 revoke all privileges on public.ai_job_runs from anon, authenticated;
 revoke all privileges on public.audit_events from anon, authenticated;
 
+grant select on public.support_ticket_messages to authenticated;
 grant select on public.app_user_roles to authenticated;
 grant select on public.service_areas to anon, authenticated;
 grant insert, update, delete on public.service_areas to authenticated;
