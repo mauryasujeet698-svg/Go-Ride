@@ -147,7 +147,10 @@ class PreviewHomeScreen extends StatefulWidget {
 }
 
 class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
-  static const _tileUrl = String.fromEnvironment('OSM_TILE_URL', defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+  static const _mapboxToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
+  static const _osmTileUrl = String.fromEnvironment('OSM_TILE_URL', defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+  static const _mapboxTileUrl = 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token={accessToken}';
+  static String get _tileUrl => _mapboxToken.isEmpty ? _osmTileUrl : _mapboxTileUrl;
   static const _nominatim = String.fromEnvironment('GEOCODER_URL', defaultValue: 'https://nominatim.openstreetmap.org');
   static const _osrm = String.fromEnvironment('ROUTING_URL', defaultValue: 'https://router.project-osrm.org');
   final pickup = TextEditingController();
@@ -870,6 +873,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                     children: [
                       TileLayer(
                         urlTemplate: _tileUrl,
+                        additionalOptions: const {'accessToken': _mapboxToken},
                         userAgentPackageName: 'com.goride.customer',
                         maxZoom: 19,
                       ),
@@ -1180,7 +1184,10 @@ class RideHomeScreen extends StatefulWidget {
   State<RideHomeScreen> createState() => _RideHomeScreenState();
 }
 class _RideHomeScreenState extends State<RideHomeScreen> {
-  static const _tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const _mapboxToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
+  static const _osmTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const _mapboxTileUrl = 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token={accessToken}';
+  static String get _tileUrl => _mapboxToken.isEmpty ? _osmTileUrl : _mapboxTileUrl;
   static const _routingUrl = 'https://router.project-osrm.org';
   final pickupText = TextEditingController();
   final destinationText = TextEditingController();
@@ -1431,7 +1438,7 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
               onTap: _mapTap,
             ),
             children: [
-              TileLayer(urlTemplate: _tileUrl, userAgentPackageName: 'com.goride.customer', maxZoom: 19),
+              TileLayer(urlTemplate: _tileUrl, additionalOptions: const {'accessToken': _mapboxToken}, userAgentPackageName: 'com.goride.customer', maxZoom: 19),
               if (routePoints.isNotEmpty)
                 PolylineLayer(polylines: [Polyline(points: routePoints, color: Colors.white, strokeWidth: 5)]),
               MarkerLayer(markers: [
