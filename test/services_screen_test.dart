@@ -14,6 +14,18 @@ void main() {
     expect(find.text('Coming soon'), findsNWidgets(2));
   });
 
+  testWidgets('Home Services navigation opens the Services screen', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: PreviewHomeScreen(backendReady: false),
+    ));
+    await tester.pump();
+    await tester.tap(find.text('Services').last);
+    await tester.pump();
+
+    expect(find.byType(ServicesScreen), findsOneWidget);
+    expect(find.text('Choose a service'), findsOneWidget);
+  });
+
   testWidgets('Parcel service opens the parcel screen', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
