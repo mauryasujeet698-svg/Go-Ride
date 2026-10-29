@@ -63,7 +63,7 @@ async function aiNarrative(provider: string, model: string, key: string, metrics
   } else if (provider === "gemini") {
     response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(key), {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {"Content-Type": "application/json", "x-goog-api-key": key},
       body: JSON.stringify({contents: [{role: "user", parts: [{text: prompt}]}], generationConfig: {responseMimeType: "application/json", temperature: 0.1}}),
       signal: AbortSignal.timeout(25000),
     });
