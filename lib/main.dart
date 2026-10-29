@@ -907,7 +907,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                               ),
                               width: 42,
                               height: 42,
-                              child: const Icon(
+                              child: Icon(
                                 Icons.location_pin,
                                 color: Theme.of(context).colorScheme.primary,
                                 size: 40,
