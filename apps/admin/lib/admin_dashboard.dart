@@ -846,6 +846,7 @@ class _AiReportsTabState extends State<_AiReportsTab> {
   late final TextEditingController _requestCost = TextEditingController(text: '0.10');
   List<Map<String, dynamic>> _reports = [];
   List<Map<String, dynamic>> _usage = [];
+  List<Map<String, dynamic>> _securityRuns = [];
 
   @override
   void initState() {
@@ -867,6 +868,7 @@ class _AiReportsTabState extends State<_AiReportsTab> {
       final settings = await _db.from('ai_runtime_settings').select().eq('singleton', true).maybeSingle();
       final reports = await _db.from('daily_ai_reports').select('id,period_start,period_end,status,summary,provider,model,findings,recommendations,created_at,error_code').order('created_at', ascending: false).limit(20);
       final usage = await _db.from('ai_usage_events').select('id,job_type,provider,model,status,estimated_cost_minor,created_at,error_code').order('created_at', ascending: false).limit(20);
+      final securityRuns = await _db.from('ai_job_runs').select('id,status,output_summary,created_at,error_code,provider,model').eq('job_type', 'security_audit').order('created_at', ascending: false).limit(10);
       if (!mounted) return;
       setState(() {
         _provider = _value(settings ?? {}, 'provider', 'none');
@@ -879,6 +881,7 @@ class _AiReportsTabState extends State<_AiReportsTab> {
         _model.text = settings?['model']?.toString() ?? '';
         _reports = List<Map<String, dynamic>>.from(reports);
         _usage = List<Map<String, dynamic>>.from(usage);
+        _securityRuns = List<Map<String, dynamic>>.from(securityRuns);
       });
     } catch (error) {
       if (mounted) _toast(context, 'Could not load AI settings or reports.');
@@ -984,6 +987,35 @@ class _AiReportsTabState extends State<_AiReportsTab> {
                 trailing: Text('~ INR ' + (((event['estimated_cost_minor'] as num?)?.toInt() ?? 0) / 100).toStringAsFixed(2)),
               ),
             if (!_loading && _usage.isEmpty) const ListTile(title: Text('No AI usage recorded yet.')),
+            const Divider(height: 32),
+            const Text('Security audit runs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Deterministic checks can run without an AI key. AI narrative analysis requires the selected provider secret.'),
+            for (final run in _securityRuns)
+              Card(
+                child: ExpansionTile(
+                  leading: Icon(run['status'] == 'succeeded' ? Icons.verified_outlined : Icons.error_outline),
+                  title: Text('Security audit · ' + _value(run, 'status')),
+                  subtitle: Text(_value(run, 'created_at') + ' · ' + _value(run, 'provider', 'none')),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text((run['output_summary'] is Map ? (run['output_summary'] as Map)['summary']?.toString() : null) ?? _value(run, 'error_code', 'No summary available.')),
+                      ),
+                    ),
+                    if (run['output_summary'] is Map && (run['output_summary'] as Map)['metrics'] is Map)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: SelectableText((run['output_summary'] as Map)['metrics'].toString()),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            if (!_loading && _securityRuns.isEmpty) const ListTile(title: Text('No security audit has run yet. Configure the cron secret and schedule after setup.')),
           ],
         ),
       );
