@@ -32,7 +32,17 @@ jobs:
       - run: flutter analyze --no-fatal-infos
       - run: flutter test --reporter expanded
       - name: Build ABI-split APKs
-        run: flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          args=()
+          [[ -n "$SUPABASE_URL" ]] && args+=(--dart-define="SUPABASE_URL=$SUPABASE_URL")
+          [[ -n "$SUPABASE_PUBLISHABLE_KEY" ]] && args+=(--dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY")
+          [[ -n "$MAPBOX_ACCESS_TOKEN" ]] && args+=(--dart-define="MAPBOX_ACCESS_TOKEN=$MAPBOX_ACCESS_TOKEN")
+          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols "${args[@]}"
       - name: Enforce APK size limit
         shell: bash
         run: |
@@ -110,7 +120,12 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-        run: flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+        shell: bash
+        run: |
+          args=()
+          [[ -n "$SUPABASE_URL" ]] && args+=(--dart-define="SUPABASE_URL=$SUPABASE_URL")
+          [[ -n "$SUPABASE_PUBLISHABLE_KEY" ]] && args+=(--dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY")
+          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols "${args[@]}"
       - name: Enforce APK size limit
         shell: bash
         run: |
