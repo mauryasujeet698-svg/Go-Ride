@@ -695,7 +695,9 @@ class _AiReportsTabState extends State<_AiReportsTab> {
   int _maxRequests = 1000;
   late final TextEditingController _model = TextEditingController();
   late final TextEditingController _budget = TextEditingController(text: '1000');
+  late final TextEditingController _requestCost = TextEditingController(text: '0.10');
   List<Map<String, dynamic>> _reports = [];
+  List<Map<String, dynamic>> _usage = [];
 
   @override
   void initState() {
@@ -707,6 +709,7 @@ class _AiReportsTabState extends State<_AiReportsTab> {
   void dispose() {
     _model.dispose();
     _budget.dispose();
+    _requestCost.dispose();
     super.dispose();
   }
 
@@ -715,6 +718,7 @@ class _AiReportsTabState extends State<_AiReportsTab> {
     try {
       final settings = await _db.from('ai_runtime_settings').select().eq('singleton', true).maybeSingle();
       final reports = await _db.from('daily_ai_reports').select('id,period_start,period_end,status,summary,provider,model,findings,recommendations,created_at,error_code').order('created_at', ascending: false).limit(20);
+      final usage = await _db.from('ai_usage_events').select('id,job_type,provider,model,status,estimated_cost_minor,created_at,error_code').order('created_at', ascending: false).limit(20);
       if (!mounted) return;
       setState(() {
         _provider = _value(settings ?? {}, 'provider', 'none');
@@ -723,8 +727,10 @@ class _AiReportsTabState extends State<_AiReportsTab> {
         _interval = (settings?['report_interval_hours'] as num?)?.toInt() ?? 24;
         _maxRequests = (settings?['max_requests_per_day'] as num?)?.toInt() ?? 1000;
         _budget.text = (((settings?['max_cost_minor_per_day'] as num?)?.toDouble() ?? 100000) / 100).toStringAsFixed(0);
+        _requestCost.text = (((settings?['estimated_cost_minor_per_request'] as num?)?.toDouble() ?? 10) / 100).toStringAsFixed(2);
         _model.text = settings?['model']?.toString() ?? '';
         _reports = List<Map<String, dynamic>>.from(reports);
+        _usage = List<Map<String, dynamic>>.from(usage);
       });
     } catch (error) {
       if (mounted) _toast(context, 'Could not load AI settings or reports.');
@@ -736,7 +742,8 @@ class _AiReportsTabState extends State<_AiReportsTab> {
 
   Future<void> _save() async {
     final budget = double.tryParse(_budget.text.trim());
-    if (budget == null || budget < 0 || _maxRequests < 1 || _interval < 1 || _interval > 168) {
+    final requestCost = double.tryParse(_requestCost.text.trim());
+    if (budget == null || budget < 0 || requestCost == null || requestCost < 0 || _maxRequests < 1 || _interval < 1 || _interval > 168) {
       _toast(context, 'Check report interval, request limit and daily budget.');
       return;
     }
@@ -750,6 +757,7 @@ class _AiReportsTabState extends State<_AiReportsTab> {
         'report_interval_hours': _interval,
         'max_requests_per_day': _maxRequests,
         'max_cost_minor_per_day': (budget * 100).round(),
+        'estimated_cost_minor_per_request': (requestCost * 100).round(),
         'updated_by': _db.auth.currentUser?.id,
       }).eq('singleton', true);
       if (mounted) _toast(context, 'AI settings saved. API keys remain in Supabase Edge Function secrets.');
@@ -800,6 +808,7 @@ class _AiReportsTabState extends State<_AiReportsTab> {
               onChanged: _loading ? null : (v) => setState(() => _maxRequests = v ?? 1000),
             ),
             TextField(controller: _budget, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Maximum AI spend per day (INR)')),
+            TextField(controller: _requestCost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Estimated cost per AI request (INR)', helperText: 'Budget enforcement uses this estimate; verify actual spend in the provider console.')),
             const SizedBox(height: 12),
             FilledButton.icon(onPressed: _loading ? null : _save, icon: const Icon(Icons.save_outlined), label: const Text('Save AI settings')),
             const Divider(height: 32),
@@ -817,6 +826,16 @@ class _AiReportsTabState extends State<_AiReportsTab> {
                 ),
               ),
             if (!_loading && _reports.isEmpty) const ListTile(title: Text('No reports yet.')),
+            const Divider(height: 32),
+            const Text('Recent AI budget events', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            for (final event in _usage)
+              ListTile(
+                leading: Icon(event['status'] == 'succeeded' ? Icons.check_circle_outline : event['status'] == 'failed' ? Icons.error_outline : Icons.schedule),
+                title: Text(_value(event, 'job_type') + ' · ' + _value(event, 'provider') + ' · ' + _value(event, 'status')),
+                subtitle: Text(_value(event, 'created_at') + (event['error_code'] == null ? '' : ' · ' + event['error_code'].toString())),
+                trailing: Text('~ INR ' + (((event['estimated_cost_minor'] as num?)?.toInt() ?? 0) / 100).toStringAsFixed(2)),
+              ),
+            if (!_loading && _usage.isEmpty) const ListTile(title: Text('No AI usage recorded yet.')),
           ],
         ),
       );
