@@ -21,6 +21,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byWidgetPredicate((widget) => widget is NavigationDestination && widget.label == 'Services'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byType(ServicesScreen), findsOneWidget);
     expect(find.text('Choose a service'), findsOneWidget);
