@@ -71,9 +71,11 @@ jobs:
           - app: admin
             path: apps/admin
             oauth_scheme: io.supabase.gorideadmin
+            app_label: 'Go-Ride Admin'
           - app: driver-partner
             path: apps/driver_partner
             oauth_scheme: io.supabase.goridedriver
+            app_label: 'Go-Ride Driver Partner'
     defaults:
       run:
         working-directory: ${{ matrix.path }}
@@ -93,13 +95,17 @@ jobs:
       - name: Configure Google OAuth callback
         env:
           OAUTH_REDIRECT_SCHEME: ${{ matrix.oauth_scheme }}
+          APP_LABEL: ${{ matrix.app_label }}
         run: |
           python3 - <<'PY'
           import os
+          import re
           from pathlib import Path
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           content = manifest.read_text()
           scheme = os.environ["OAUTH_REDIRECT_SCHEME"]
+          label = os.environ["APP_LABEL"]
+          content = re.sub(r'android:label="[^"]*"', 'android:label="' + label + '"', content, count=1)
           if "login-callback" not in content:
               callback = """            <intent-filter>
                           <action android:name="android.intent.action.VIEW" />
