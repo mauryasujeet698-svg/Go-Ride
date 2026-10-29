@@ -998,7 +998,7 @@ class _AiReportsTabState extends State<_AiReportsTab> {
                             padding: const EdgeInsets.all(16),
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: SelectableText((report['metrics'] as Map).entries.map((e) => e.key.toString() + ': ' + e.value.toString()).join('\\n')),
+                              child: SelectableText((report['metrics'] as Map).entries.map((e) => e.key.toString() + ': ' + e.value.toString()).join('\n')),
                             ),
                           ),
                         ],
