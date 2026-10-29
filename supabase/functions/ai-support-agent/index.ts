@@ -124,7 +124,7 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data: ticket, error: ticketError } = await admin.from("support_tickets")
-    .select("id,user_id,subject,status,ai_attempt_count,needs_human,priority")
+    .select("id,user_id,subject,status,ai_attempt_count,needs_human,priority,escalated_at")
     .eq("id", ticketId).maybeSingle();
   if (ticketError || !ticket || ticket.user_id !== authData.user.id) return json({ error: "ticket_not_found" }, 404);
   if (["resolved", "closed"].includes(ticket.status)) return json({ error: "ticket_closed" }, 409);
