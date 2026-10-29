@@ -28,10 +28,14 @@ Deno.serve(async (req: Request) => {
       return json({ error: "invalid_coordinates" }, 400);
     }
 
+    const mapboxToken = Deno.env.get("MAPBOX_ACCESS_TOKEN") || "";
     const routingBase = (Deno.env.get("ROUTING_URL") || "https://router.project-osrm.org").replace(/\/$/, "");
-    const routeUrl = new URL(`${routingBase}/route/v1/driving/${pickup.longitude},${pickup.latitude};${destination.longitude},${destination.latitude}`);
+    const routeUrl = mapboxToken
+      ? new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${pickup.longitude},${pickup.latitude};${destination.longitude},${destination.latitude}`)
+      : new URL(`${routingBase}/route/v1/driving/${pickup.longitude},${pickup.latitude};${destination.longitude},${destination.latitude}`);
     routeUrl.searchParams.set("overview", "false");
     routeUrl.searchParams.set("steps", "false");
+    if (mapboxToken) routeUrl.searchParams.set("access_token", mapboxToken);
     const routeResponse = await fetch(routeUrl, { signal: AbortSignal.timeout(12000) });
     if (!routeResponse.ok) return json({ error: "routing_unavailable" }, 503);
     const routeData = await routeResponse.json();
