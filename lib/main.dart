@@ -1321,8 +1321,16 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
     final b = destination;
     if (a == null || b == null) return;
     try {
-      final uri = Uri.parse('$_routingUrl/route/v1/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}')
-          .replace(queryParameters: {'overview': 'full', 'geometries': 'geojson', 'steps': 'false'});
+      final uri = _mapboxToken.isNotEmpty
+          ? Uri.parse('https://api.mapbox.com/directions/v5/mapbox/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}')
+              .replace(queryParameters: {
+                'overview': 'full',
+                'geometries': 'geojson',
+                'steps': 'false',
+                'access_token': _mapboxToken,
+              })
+          : Uri.parse('$_routingUrl/route/v1/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}')
+              .replace(queryParameters: {'overview': 'full', 'geometries': 'geojson', 'steps': 'false'});
       final response = await http.get(uri).timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) return;
       final data = jsonDecode(response.body) as Map<String, dynamic>;
