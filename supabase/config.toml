@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.ai-daily-report]
 verify_jwt = false
+
+[functions.ai-support-agent]
+verify_jwt = false
