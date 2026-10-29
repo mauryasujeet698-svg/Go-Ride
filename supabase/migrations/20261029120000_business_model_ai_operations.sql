@@ -1,14 +1,6 @@
 -- Go-Ride configurable business models, subscription ledger and AI operations foundation.
 -- Provider credentials MUST be stored as Supabase Edge Function secrets, never in these tables.
 
-create table if not exists public.app_user_roles (
-  user_id uuid not null references auth.users(id) on delete cascade,
-  role text not null check (role in ('admin', 'support_agent', 'driver_partner')),
-  granted_by uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  primary key (user_id, role)
-);
-
 create or replace function public.has_app_role(p_role text)
 returns boolean
 language sql
@@ -17,8 +9,11 @@ security definer
 set search_path = public, pg_temp
 as $$
   select exists (
-    select 1 from public.app_user_roles r
-    where r.user_id = auth.uid() and r.role = p_role
+    select 1 from public.user_roles r
+    where r.user_id = auth.uid()
+      and r.role = p_role
+      and r.status = 'active'
+      and r.revoked_at is null
   );
 $$;
 revoke all on function public.has_app_role(text) from public, anon;
@@ -317,7 +312,6 @@ revoke all on function public.get_ai_daily_metrics(timestamptz,timestamptz) from
 grant execute on function public.get_ai_daily_metrics(timestamptz,timestamptz) to service_role;
 
 alter table public.support_ticket_messages enable row level security;
-alter table public.app_user_roles enable row level security;
 alter table public.service_areas enable row level security;
 alter table public.area_business_settings enable row level security;
 alter table public.subscription_plans enable row level security;
@@ -327,10 +321,6 @@ alter table public.ai_runtime_settings enable row level security;
 alter table public.daily_ai_reports enable row level security;
 alter table public.ai_job_runs enable row level security;
 alter table public.audit_events enable row level security;
-
-drop policy if exists app_user_roles_select_self_or_admin on public.app_user_roles;
-create policy app_user_roles_select_self_or_admin on public.app_user_roles
-for select to authenticated using (user_id = (select auth.uid()) or public.has_app_role('admin'));
 
 drop policy if exists service_areas_read_active on public.service_areas;
 create policy service_areas_read_active on public.service_areas
@@ -395,7 +385,7 @@ for select to authenticated using (
   public.has_app_role('admin')
   or exists (
     select 1 from public.support_tickets t
-    where t.id = ticket_id and t.user_id = (select auth.uid())
+    where t.id = support_ticket_messages.ticket_id and t.user_id = (select auth.uid())
   )
 );
 
@@ -404,7 +394,6 @@ create policy support_tickets_admin_read on public.support_tickets
 for select to authenticated using (public.has_app_role('admin') or user_id = (select auth.uid()));
 
 revoke all privileges on public.support_ticket_messages from anon, authenticated;
-revoke all privileges on public.app_user_roles from anon, authenticated;
 revoke all privileges on public.service_areas from anon, authenticated;
 revoke all privileges on public.area_business_settings from anon, authenticated;
 revoke all privileges on public.subscription_plans from anon, authenticated;
@@ -416,7 +405,6 @@ revoke all privileges on public.ai_job_runs from anon, authenticated;
 revoke all privileges on public.audit_events from anon, authenticated;
 
 grant select on public.support_ticket_messages to authenticated;
-grant select on public.app_user_roles to authenticated;
 grant select on public.service_areas to anon, authenticated;
 grant insert, update, delete on public.service_areas to authenticated;
 grant select on public.area_business_settings to anon, authenticated;
