@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
@@ -71,9 +72,13 @@ class _DriverPageState extends State<_DriverPage> {
   String _category = 'BIKE';
   String _message = '';
   bool _busy = false;
+  bool _refreshing = false;
   bool _isDriver = false;
   bool _isAvailable = false;
+  String _driverStatus = 'offline';
   String? _areaId;
+  StreamSubscription<Position>? _locationSubscription;
+  Timer? _refreshTimer;
   String _businessModel = 'subscription';
   List<Map<String, dynamic>> _areas = [];
   List<Map<String, dynamic>> _plans = [];
@@ -100,6 +105,7 @@ class _DriverPageState extends State<_DriverPage> {
     if (_signedIn) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _run(_refresh));
     }
+    _refreshTimer = Timer.periodic(const Duration(seconds: 12), (_) => _refresh());
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -123,80 +129,178 @@ class _DriverPageState extends State<_DriverPage> {
       });
 
   Future<void> _refresh() async {
-    final user = _db.auth.currentUser;
-    if (user == null) {
-      _isDriver = false;
-      _application = null;
-      return;
-    }
+    if (_refreshing) return;
+    _refreshing = true;
+    try {
+      final user = _db.auth.currentUser;
+      if (user == null) {
+        _isDriver = false;
+        _application = null;
+        _isAvailable = false;
+        _driverStatus = 'offline';
+        _areas = [];
+        _plans = [];
+        _subscriptions = [];
+        _rides = [];
+        _areaId = null;
+        await _stopLocationStream();
+        return;
+      }
 
-    final roles = await _db.from('user_roles')
-        .select('role,status,revoked_at')
-        .eq('user_id', user.id)
-        .eq('role', 'driver')
-        .eq('status', 'active')
-        .isFilter('revoked_at', null);
-    _isDriver = (roles as List).isNotEmpty;
+      final roles = await _db.from('user_roles')
+          .select('role,status,revoked_at')
+          .eq('user_id', user.id)
+          .eq('role', 'driver')
+          .eq('status', 'active')
+          .isFilter('revoked_at', null);
+      _isDriver = (roles as List).isNotEmpty;
 
-    final applications = await _db.from('driver_applications')
-        .select('id,status,review_note,created_at,vehicle_category,vehicle_make_model,vehicle_registration')
-        .eq('user_id', user.id)
-        .order('created_at', ascending: false)
-        .limit(1);
-    _application = (applications as List).isEmpty
-        ? null
-        : Map<String, dynamic>.from((applications as List).first);
+      final applications = await _db.from('driver_applications')
+          .select('id,status,review_note,created_at,vehicle_category,vehicle_make_model,vehicle_registration')
+          .eq('user_id', user.id)
+          .order('created_at', ascending: false)
+          .limit(1);
+      _application = (applications as List).isEmpty
+          ? null
+          : Map<String, dynamic>.from((applications as List).first);
 
-    if (!_isDriver) {
-      _areas = [];
-      _plans = [];
-      _subscriptions = [];
-      _rides = [];
-      _areaId = null;
-      return;
-    }
+      if (!_isDriver) {
+        _areas = [];
+        _plans = [];
+        _subscriptions = [];
+        _rides = [];
+        _areaId = null;
+        _isAvailable = false;
+        _driverStatus = 'offline';
+        await _stopLocationStream();
+        return;
+      }
 
-    final areaRows = await _db.from('service_areas')
-        .select('id,code,name,city,pincode,active')
-        .eq('active', true)
-        .order('code');
-    _areas = List<Map<String, dynamic>>.from(areaRows);
-    if (_areas.isNotEmpty && (_areaId == null || !_areas.any((a) => a['id'].toString() == _areaId))) {
-      _areaId = _areas.first['id'].toString();
-    }
-    if (_areaId != null) {
-      final setting = await _db.from('area_business_settings')
-          .select('business_model,active')
-          .eq('area_id', _areaId!)
-          .eq('service', 'ride')
-          .maybeSingle();
-      _businessModel = setting?['business_model']?.toString() ?? 'disabled';
-      final plans = await _db.from('subscription_plans')
-          .select('id,name,description,price_minor,currency,duration_minutes,active')
-          .eq('area_id', _areaId!)
+      final areaRows = await _db.from('service_areas')
+          .select('id,code,name,city,pincode,active')
           .eq('active', true)
-          .order('price_minor');
-      _plans = List<Map<String, dynamic>>.from(plans);
-    } else {
-      _plans = [];
+          .order('code');
+      _areas = List<Map<String, dynamic>>.from(areaRows);
+      final profile = await _db.from('driver_profiles')
+          .select('status,current_area_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+      _driverStatus = profile?['status']?.toString() ?? 'offline';
+      _isAvailable = _driverStatus == 'available';
+      final profileAreaId = profile?['current_area_id']?.toString();
+      if (profileAreaId != null && _areas.any((a) => a['id'].toString() == profileAreaId)) {
+        _areaId = profileAreaId;
+      } else if (_areas.isNotEmpty && (_areaId == null || !_areas.any((a) => a['id'].toString() == _areaId))) {
+        _areaId = _areas.first['id'].toString();
+      }
+
+      if (_areaId != null) {
+        final setting = await _db.from('area_business_settings')
+            .select('business_model,active')
+            .eq('area_id', _areaId!)
+            .eq('service', 'ride')
+            .maybeSingle();
+        _businessModel = setting?['business_model']?.toString() ?? 'disabled';
+        final plans = await _db.from('subscription_plans')
+            .select('id,name,description,price_minor,currency,duration_minutes,active')
+            .eq('area_id', _areaId!)
+            .eq('active', true)
+            .order('price_minor');
+        _plans = List<Map<String, dynamic>>.from(plans);
+      } else {
+        _plans = [];
+        _businessModel = 'disabled';
+      }
+
+      final subs = await _db.from('driver_subscriptions')
+          .select('id,area_id,plan_id,status,price_minor_snapshot,currency,starts_at,expires_at,duration_minutes_snapshot')
+          .eq('driver_id', user.id)
+          .order('created_at', ascending: false)
+          .limit(20);
+      _subscriptions = List<Map<String, dynamic>>.from(subs);
+
+      final rides = await _db.from('rides')
+          .select('id,status,category,fare_minor,currency,pickup_label,destination_label,created_at')
+          .eq('driver_id', user.id)
+          .inFilter('status', ['driver_assigned','driver_arriving','driver_arrived','in_trip'])
+          .order('created_at', ascending: false)
+          .limit(20);
+      _rides = List<Map<String, dynamic>>.from(rides);
+
+      if (_driverStatus == 'available' || _driverStatus == 'on_trip') {
+        try {
+          await _startLocationStream();
+        } catch (error) {
+          _message = error.toString().replaceFirst('Bad state: ', '');
+        }
+      } else {
+        await _stopLocationStream();
+      }
+      if (mounted) setState(() {});
+    } catch (error) {
+      _message = 'Could not refresh driver data. Check connection and role approval.';
+      debugPrint('Driver refresh failed: $error');
+      if (mounted) setState(() {});
+    } finally {
+      _refreshing = false;
     }
+  }
 
-    final subs = await _db.from('driver_subscriptions')
-        .select('id,area_id,plan_id,status,price_minor_snapshot,currency,starts_at,expires_at,duration_minutes_snapshot')
-        .eq('driver_id', user.id)
-        .order('created_at', ascending: false)
-        .limit(20);
-    _subscriptions = List<Map<String, dynamic>>.from(subs);
+  Future<void> _ensureLocationPermission() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw StateError('Turn on device location before going online.');
+    }
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      throw StateError('Location permission is required to receive rides.');
+    }
+  }
 
-    final rides = await _db.from('rides')
-        .select('id,status,category,fare_minor,currency,pickup_label,destination_label,created_at')
-        .eq('driver_id', user.id)
-        .inFilter('status', ['driver_assigned','driver_arriving','driver_arrived','in_trip'])
-        .order('created_at', ascending: false)
-        .limit(20);
-    _rides = List<Map<String, dynamic>>.from(rides);
-    final profile = await _db.from('driver_profiles').select('status').eq('user_id', user.id).maybeSingle();
-    _isAvailable = profile?['status'] == 'available';
+  Future<void> _startLocationStream() async {
+    if (_locationSubscription != null) return;
+    await _ensureLocationPermission();
+    const notification = ForegroundNotificationConfig(
+      notificationTitle: 'Go-Ride Driver Partner',
+      notificationText: 'Sharing your location while you are online.',
+      notificationChannelName: 'Go-Ride driver location',
+      enableWakeLock: true,
+      setOngoing: true,
+    );
+    final settings = AndroidSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 15,
+      intervalDuration: const Duration(seconds: 10),
+      foregroundNotificationConfig: notification,
+    );
+    _locationSubscription = Geolocator.getPositionStream(locationSettings: settings).listen(
+      (position) => _sendLocationUpdate(position),
+      onError: (Object error) {
+        debugPrint('Driver location stream failed: $error');
+        if (mounted) setState(() => _message = 'Location updates failed. Check GPS and permission settings.');
+      },
+    );
+  }
+
+  Future<void> _stopLocationStream() async {
+    await _locationSubscription?.cancel();
+    _locationSubscription = null;
+  }
+
+  Future<void> _sendLocationUpdate(Position position) async {
+    final areaId = _areaId;
+    if (areaId == null || !['available', 'on_trip'].contains(_driverStatus)) return;
+    try {
+      await _db.rpc('driver_update_location', params: {
+        'p_area_id': areaId,
+        'p_latitude': position.latitude,
+        'p_longitude': position.longitude,
+      });
+    } catch (error) {
+      debugPrint('Driver location update failed: $error');
+    }
   }
 
   Future<void> _submitApplication() async {
@@ -239,11 +343,23 @@ class _DriverPageState extends State<_DriverPage> {
       return;
     }
     await _run(() async {
+      if (value) await _ensureLocationPermission();
       await _db.rpc('driver_set_availability', params: {
         'p_area_id': areaId,
         'p_available': value,
       });
       _message = value ? 'You are now available in this service area.' : 'You are now offline.';
+      await _refresh();
+    });
+  }
+
+  Future<void> _declineRide(String rideId) async {
+    await _run(() async {
+      await _db.rpc('driver_decline_ride', params: {
+        'p_ride_id': rideId,
+        'p_reason': 'driver_declined',
+      });
+      _message = 'Ride declined. Go-Ride will look for another eligible driver.';
       await _refresh();
     });
   }
@@ -294,6 +410,8 @@ class _DriverPageState extends State<_DriverPage> {
   void dispose() {
     _phone.dispose();
     _authSubscription?.cancel();
+    _refreshTimer?.cancel();
+    _locationSubscription?.cancel();
     _name.dispose();
     _vehicle.dispose();
     _registration.dispose();
