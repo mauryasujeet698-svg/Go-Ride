@@ -196,6 +196,7 @@ Deno.serve(async (req: Request) => {
   };
   let provider = settings.provider ?? "none";
   let model = settings.model ?? null;
+  let usageId: string | null = null;
 
   try {
     if (provider !== "none") {
@@ -204,10 +205,39 @@ Deno.serve(async (req: Request) => {
         : provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
       const apiKey = Deno.env.get(keyName) ?? "";
       if (!apiKey) throw new Error("provider_key_missing");
+      const reservation = await admin.rpc("reserve_ai_usage_budget", {
+        p_job_type: "daily_report",
+        p_provider: provider,
+        p_model: model,
+      });
+      if (reservation.error || !reservation.data) {
+        const message = reservation.error?.message ?? "";
+        if (message.includes("ai_request_budget_exceeded")) throw new Error("ai_request_budget_exceeded");
+        if (message.includes("ai_cost_budget_exceeded")) throw new Error("ai_cost_budget_exceeded");
+        throw new Error("ai_budget_reservation_failed");
+      }
+      usageId = String(reservation.data);
       narrative = await callProvider(provider, model, apiKey, metricsResult.data);
+      await admin.from("ai_usage_events").update({
+        status: "succeeded",
+        completed_at: new Date().toISOString(),
+      }).eq("id", usageId);
     }
   } catch (error) {
-    const errorCode = error instanceof Error ? error.message : "ai_analysis_failed";
+    const rawCode = error instanceof Error ? error.message : "";
+    const allowedCodes = [
+      "provider_model_missing", "provider_key_missing", "provider_request_failed",
+      "provider_empty_response", "ai_request_budget_exceeded", "ai_cost_budget_exceeded",
+      "ai_budget_reservation_failed",
+    ];
+    const errorCode = allowedCodes.includes(rawCode) ? rawCode : "ai_analysis_failed";
+    if (usageId) {
+      await admin.from("ai_usage_events").update({
+        status: "failed",
+        error_code: errorCode,
+        completed_at: new Date().toISOString(),
+      }).eq("id", usageId);
+    }
     await admin.from("daily_ai_reports").upsert({
       period_start: periodStart.toISOString(),
       period_end: periodEnd.toISOString(),
@@ -254,6 +284,21 @@ Deno.serve(async (req: Request) => {
     }).eq("id", job.id);
     return json({ error: "report_persist_failed" }, 503);
   }
+
+  await admin.from("audit_events").insert({
+    actor_type: "system",
+    action: "ai.daily_report_generated",
+    entity_type: "daily_ai_report",
+    entity_id: periodEnd.toISOString(),
+    outcome: "success",
+    metadata: {
+      period_start: periodStart.toISOString(),
+      period_end: periodEnd.toISOString(),
+      provider,
+      findings_count: narrative.findings.length,
+      recommendations_count: narrative.recommendations.length,
+    },
+  });
 
   await admin.from("ai_job_runs").update({
     status: "succeeded",
