@@ -227,6 +227,7 @@ class _DriverPageState extends State<_DriverPage> {
           .limit(20);
       _rides = List<Map<String, dynamic>>.from(rides);
 
+      _message = '';
       if (_driverStatus == 'available' || _driverStatus == 'on_trip') {
         try {
           await _startLocationStream();
@@ -463,7 +464,7 @@ class _DriverPageState extends State<_DriverPage> {
                     value: area['id'].toString(),
                     child: Text(_value(area, 'name') + ' · ' + _value(area, 'code')),
                   )).toList(),
-                  onChanged: _busy ? null : (value) async {
+                  onChanged: _busy || _driverStatus == 'on_trip' ? null : (value) async {
                     if (value == null) return;
                     if (_isAvailable) await _toggleAvailability(false);
                     if (!mounted) return;
@@ -475,10 +476,10 @@ class _DriverPageState extends State<_DriverPage> {
                 Card(
                   child: SwitchListTile(
                     value: _isAvailable,
-                    onChanged: _busy ? null : _toggleAvailability,
-                    title: Text(_isAvailable ? 'You are online' : 'You are offline'),
-                    subtitle: Text('Business model: ' + _businessModel),
-                    secondary: Icon(_isAvailable ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                    onChanged: _busy || _driverStatus == 'on_trip' ? null : _toggleAvailability,
+                    title: Text(_driverStatus == 'on_trip' ? 'Active ride in progress' : _isAvailable ? 'You are online' : 'You are offline'),
+                    subtitle: Text('Business model: ' + _businessModel + (_driverStatus == 'on_trip' ? ' · Location sharing remains active' : '')),
+                    secondary: Icon(_driverStatus == 'on_trip' ? Icons.local_taxi : _isAvailable ? Icons.radio_button_checked : Icons.radio_button_unchecked),
                   ),
                 ),
               ],
@@ -521,21 +522,32 @@ class _DriverPageState extends State<_DriverPage> {
                     title: Text(_value(ride, 'category') + ' · ' + _value(ride, 'status')),
                     subtitle: Text(_value(ride, 'pickup_label') + ' → ' + _value(ride, 'destination_label') + '\n' + _money(ride, 'fare_minor')),
                     isThreeLine: true,
-                    trailing: TextButton(
-                      onPressed: _busy ? null : () => _advanceRide(ride),
-                      child: Text(switch (ride['status']) {
-                        'driver_assigned' => 'On my way',
-                        'driver_arriving' => 'Arrived',
-                        'driver_arrived' => 'Start trip',
-                        'in_trip' => 'Complete',
-                        _ => 'Update',
-                      }),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (ride['status'] == 'driver_assigned')
+                          IconButton(
+                            tooltip: 'Decline ride',
+                            onPressed: _busy ? null : () => _declineRide(ride['id'].toString()),
+                            icon: const Icon(Icons.close),
+                          ),
+                        TextButton(
+                          onPressed: _busy ? null : () => _advanceRide(ride),
+                          child: Text(switch (ride['status']) {
+                            'driver_assigned' => 'Accept / on way',
+                            'driver_arriving' => 'Arrived',
+                            'driver_arrived' => 'Start trip',
+                            'in_trip' => 'Complete',
+                            _ => 'Update',
+                          }),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               if (_rides.isEmpty) const ListTile(title: Text('No active rides assigned to you.')),
               const SizedBox(height: 16),
-              const Text('Live GPS tracking, pickup OTP verification and driver earnings settlement are still pending before public launch.', style: TextStyle(color: Colors.grey)),
+              const Text('Foreground GPS sharing and automatic dispatch are enabled when location permission is granted. Pickup OTP verification and driver earnings settlement remain launch gates.', style: TextStyle(color: Colors.grey)),
             ],
           ),
         ),
