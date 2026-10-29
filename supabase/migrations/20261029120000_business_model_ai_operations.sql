@@ -247,7 +247,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $metrics$
 begin
   if p_period_start is null or p_period_end is null or p_period_end <= p_period_start then
     raise exception 'invalid_reporting_period' using errcode = '22023';
@@ -307,7 +307,7 @@ begin
     )
   );
 end;
-$;
+$metrics$;
 revoke all on function public.get_ai_daily_metrics(timestamptz,timestamptz) from public, anon, authenticated;
 grant execute on function public.get_ai_daily_metrics(timestamptz,timestamptz) to service_role;
 
