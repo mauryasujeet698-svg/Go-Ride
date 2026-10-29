@@ -230,6 +230,79 @@ drop trigger if exists ai_runtime_settings_touch_updated_at on public.ai_runtime
 create trigger ai_runtime_settings_touch_updated_at before update on public.ai_runtime_settings
 for each row execute function public.touch_updated_at();
 
+
+create or replace function public.get_ai_daily_metrics(
+  p_period_start timestamptz,
+  p_period_end timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+begin
+  if p_period_start is null or p_period_end is null or p_period_end <= p_period_start then
+    raise exception 'invalid_reporting_period' using errcode = '22023';
+  end if;
+
+  return jsonb_build_object(
+    'period', jsonb_build_object('start', p_period_start, 'end', p_period_end),
+    'rides', (
+      select jsonb_build_object(
+        'created', count(*),
+        'completed', count(*) filter (where status = 'completed'),
+        'cancelled', count(*) filter (where status = 'cancelled'),
+        'failed', count(*) filter (where status = 'failed'),
+        'active_at_query_time', count(*) filter (where status in ('searching','driver_assigned','driver_arriving','driver_arrived','otp_required','in_trip'))
+      )
+      from public.rides
+      where created_at >= p_period_start and created_at < p_period_end
+    ),
+    'financials', (
+      select jsonb_build_object(
+        'gross_fare_minor', coalesce(sum(fare_minor), 0),
+        'commission_minor', coalesce(sum(commission_minor), 0),
+        'driver_net_minor', coalesce(sum(driver_net_minor), 0),
+        'currency', 'INR'
+      )
+      from public.ride_financials
+      where created_at >= p_period_start and created_at < p_period_end
+    ),
+    'subscriptions', (
+      select jsonb_build_object(
+        'created_in_period', count(*) filter (where created_at >= p_period_start and created_at < p_period_end),
+        'active_now', count(*) filter (where status = 'active' and expires_at > now()),
+        'expiring_in_24h', count(*) filter (where status = 'active' and expires_at > now() and expires_at <= now() + interval '24 hours')
+      )
+      from public.driver_subscriptions
+    ),
+    'support', (
+      select jsonb_build_object(
+        'opened_in_period', count(*) filter (where created_at >= p_period_start and created_at < p_period_end),
+        'unresolved', count(*) filter (where status not in ('resolved','closed')),
+        'needs_human', count(*) filter (where needs_human and status not in ('resolved','closed')),
+        'urgent_unresolved', count(*) filter (where priority = 'urgent' and status not in ('resolved','closed'))
+      )
+      from public.support_tickets
+    ),
+    'active_areas', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'area_code', a.code,
+        'area_name', a.name,
+        'service', s.service,
+        'business_model', s.business_model,
+        'commission_bps', s.commission_bps
+      ) order by a.code, s.service), '[]'::jsonb)
+      from public.service_areas a
+      left join public.area_business_settings s on s.area_id = a.id and s.active
+      where a.active
+    )
+  );
+end;
+$;
+revoke all on function public.get_ai_daily_metrics(timestamptz,timestamptz) from public, anon, authenticated;
+grant execute on function public.get_ai_daily_metrics(timestamptz,timestamptz) to service_role;
+
 alter table public.app_user_roles enable row level security;
 alter table public.service_areas enable row level security;
 alter table public.area_business_settings enable row level security;
