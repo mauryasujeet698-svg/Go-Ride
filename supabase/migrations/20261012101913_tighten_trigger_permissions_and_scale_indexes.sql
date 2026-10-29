@@ -1,0 +1,2 @@
+-- Trigger permissions and baseline indexes are already created/restricted in the initial and secure-RPC source migrations.
+-- This history-alignment migration intentionally makes no further changes on a fresh database.
