@@ -61,7 +61,7 @@ async function callProvider(provider: string, model: string, apiKey: string, met
     extract = (payload) => payload?.choices?.[0]?.message?.content ?? "";
   } else if (provider === "gemini") {
     response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
