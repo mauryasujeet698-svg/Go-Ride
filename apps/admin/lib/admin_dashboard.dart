@@ -7,7 +7,7 @@ class AdminDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-        length: 5,
+        length: 6,
         child: Scaffold(
           appBar: AppBar(
             title: const Text('Go-Ride Operations'),
@@ -23,6 +23,7 @@ class AdminDashboard extends StatelessWidget {
               tabs: [
                 Tab(icon: Icon(Icons.dashboard_outlined), text: 'Overview'),
                 Tab(icon: Icon(Icons.tune), text: 'Business'),
+                Tab(icon: Icon(Icons.price_change_outlined), text: 'Fares'),
                 Tab(icon: Icon(Icons.card_membership), text: 'Plans'),
                 Tab(icon: Icon(Icons.auto_awesome), text: 'AI & Reports'),
                 Tab(icon: Icon(Icons.support_agent), text: 'Operations'),
@@ -33,6 +34,7 @@ class AdminDashboard extends StatelessWidget {
             children: [
               _OverviewTab(),
               _BusinessTab(),
+              _FarePricingTab(),
               _PlansTab(),
               _AiReportsTab(),
               _OperationsTab(),
@@ -486,6 +488,152 @@ class _BusinessModelEditorState extends State<_BusinessModelEditor> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           FilledButton(onPressed: _save, child: const Text('Save model')),
+        ],
+      );
+}
+
+class _FarePricingTab extends StatefulWidget {
+  const _FarePricingTab();
+
+  @override
+  State<_FarePricingTab> createState() => _FarePricingTabState();
+}
+
+class _FarePricingTabState extends State<_FarePricingTab> {
+  bool _loading = true;
+  List<Map<String, dynamic>> _rules = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final rows = await _db.from('pricing_rules')
+          .select('category,base_fare_minor,per_km_minor,minimum_fare_minor,currency,enabled')
+          .order('category');
+      if (mounted) setState(() => _rules = List<Map<String, dynamic>>.from(rows));
+    } catch (error) {
+      if (mounted) _toast(context, 'Could not load fare rules. Verify admin access.');
+      debugPrint('Fare rule load failed: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _edit(Map<String, dynamic> rule) async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _FareRuleEditor(rule: rule),
+    );
+    if (result == null) return;
+    try {
+      await _db.from('pricing_rules').update(result).eq('category', rule['category']);
+      if (mounted) _toast(context, 'Fare rule updated for ' + _value(rule, 'category') + '.');
+      await _load();
+    } catch (error) {
+      if (mounted) _toast(context, 'Could not update fare rule.');
+      debugPrint('Fare rule update failed: $error');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text('Fare pricing', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            const Text('Rates are stored in Supabase and take effect without publishing a new APK. Review prices and local regulations before enabling a category in production. Changes are recorded in the audit log.'),
+            const SizedBox(height: 12),
+            if (_loading) const LinearProgressIndicator(),
+            for (final rule in _rules)
+              Card(
+                child: ListTile(
+                  leading: Icon(
+                    rule['category'] == 'BIKE' ? Icons.two_wheeler
+                      : rule['category'] == 'AUTO' ? Icons.electric_rickshaw
+                      : rule['category'] == 'SEDAN' ? Icons.local_taxi
+                      : Icons.directions_car,
+                  ),
+                  title: Text(_value(rule, 'category') + (rule['enabled'] == true ? ' · Enabled' : ' · Disabled')),
+                  subtitle: Text(
+                    'Base: INR ' + (((rule['base_fare_minor'] as num?)?.toInt() ?? 0) / 100).toStringAsFixed(2) +
+                    ' · Per km: INR ' + (((rule['per_km_minor'] as num?)?.toInt() ?? 0) / 100).toStringAsFixed(2) +
+                    ' · Minimum: INR ' + (((rule['minimum_fare_minor'] as num?)?.toInt() ?? 0) / 100).toStringAsFixed(2),
+                  ),
+                  trailing: IconButton(onPressed: () => _edit(rule), icon: const Icon(Icons.edit_outlined)),
+                ),
+              ),
+            if (!_loading && _rules.isEmpty) const ListTile(title: Text('No fare rules found.')),
+          ],
+        ),
+      );
+}
+
+class _FareRuleEditor extends StatefulWidget {
+  const _FareRuleEditor({required this.rule});
+  final Map<String, dynamic> rule;
+
+  @override
+  State<_FareRuleEditor> createState() => _FareRuleEditorState();
+}
+
+class _FareRuleEditorState extends State<_FareRuleEditor> {
+  late final TextEditingController _base = TextEditingController(text: (((widget.rule['base_fare_minor'] as num?)?.toDouble() ?? 0) / 100).toStringAsFixed(2));
+  late final TextEditingController _perKm = TextEditingController(text: (((widget.rule['per_km_minor'] as num?)?.toDouble() ?? 0) / 100).toStringAsFixed(2));
+  late final TextEditingController _minimum = TextEditingController(text: (((widget.rule['minimum_fare_minor'] as num?)?.toDouble() ?? 0) / 100).toStringAsFixed(2));
+  bool _enabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = widget.rule['enabled'] as bool? ?? false;
+  }
+
+  @override
+  void dispose() {
+    _base.dispose();
+    _perKm.dispose();
+    _minimum.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final base = double.tryParse(_base.text.trim());
+    final perKm = double.tryParse(_perKm.text.trim());
+    final minimum = double.tryParse(_minimum.text.trim());
+    if (base == null || perKm == null || minimum == null || base < 0 || perKm < 0 || minimum < 0) {
+      _toast(context, 'Enter valid non-negative INR amounts.');
+      return;
+    }
+    Navigator.of(context).pop({
+      'base_fare_minor': (base * 100).round(),
+      'per_km_minor': (perKm * 100).round(),
+      'minimum_fare_minor': (minimum * 100).round(),
+      'enabled': _enabled,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text('Edit ' + _value(widget.rule, 'category') + ' fare'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: _base, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Base fare (INR)')),
+            TextField(controller: _perKm, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Per kilometre (INR)')),
+            TextField(controller: _minimum, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Minimum fare (INR)')),
+            SwitchListTile(value: _enabled, onChanged: (v) => setState(() => _enabled = v), title: const Text('Fare category enabled')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: _save, child: const Text('Save fares')),
         ],
       );
 }
