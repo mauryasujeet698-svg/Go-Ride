@@ -1035,6 +1035,24 @@ class _AiReportsTabState extends State<_AiReportsTab> {
                         child: Text((run['output_summary'] is Map ? (run['output_summary'] as Map)['summary']?.toString() : null) ?? _value(run, 'error_code', 'No summary available.')),
                       ),
                     ),
+                    if (run['output_summary'] is Map && (run['output_summary'] as Map)['findings'] is List && ((run['output_summary'] as Map)['findings'] as List).isNotEmpty) ...[
+                      const Padding(padding: EdgeInsets.fromLTRB(16, 8, 16, 4), child: Align(alignment: Alignment.centerLeft, child: Text('Findings', style: TextStyle(fontWeight: FontWeight.bold)))),
+                      for (final finding in ((run['output_summary'] as Map)['findings'] as List))
+                        ListTile(
+                          leading: Icon(finding is Map && finding['severity'] == 'high' ? Icons.warning_amber_rounded : Icons.info_outline),
+                          title: Text(finding is Map ? (finding['title']?.toString() ?? 'Finding') : finding.toString()),
+                          subtitle: Text(finding is Map ? (finding['detail']?.toString() ?? finding['severity']?.toString() ?? '') : ''),
+                        ),
+                    ],
+                    if (run['output_summary'] is Map && (run['output_summary'] as Map)['recommendations'] is List && ((run['output_summary'] as Map)['recommendations'] as List).isNotEmpty) ...[
+                      const Padding(padding: EdgeInsets.fromLTRB(16, 8, 16, 4), child: Align(alignment: Alignment.centerLeft, child: Text('Recommendations', style: TextStyle(fontWeight: FontWeight.bold)))),
+                      for (final recommendation in ((run['output_summary'] as Map)['recommendations'] as List))
+                        ListTile(
+                          leading: const Icon(Icons.lightbulb_outline),
+                          title: Text(recommendation is Map ? (recommendation['action']?.toString() ?? 'Recommendation') : recommendation.toString()),
+                          subtitle: Text(recommendation is Map ? (recommendation['reason']?.toString() ?? recommendation['priority']?.toString() ?? '') : ''),
+                        ),
+                    ],
                     if (run['output_summary'] is Map && (run['output_summary'] as Map)['metrics'] is Map)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
