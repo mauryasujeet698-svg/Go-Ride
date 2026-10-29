@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const supabasePublishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+const driverRedirectUri = 'io.supabase.goridedriver://login-callback/';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty) {
-    await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
+    await Supabase.initialize(
+      url: supabaseUrl,
+      publishableKey: supabasePublishableKey,
+      authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
+    );
   }
   runApp(const DriverPartnerApp());
 }
@@ -56,7 +63,7 @@ class _DriverPage extends StatefulWidget {
 
 class _DriverPageState extends State<_DriverPage> {
   final _phone = TextEditingController();
-  final _otp = TextEditingController();
+  StreamSubscription<AuthState>? _authSubscription;
   final _name = TextEditingController();
   final _vehicle = TextEditingController();
   final _registration = TextEditingController();
@@ -80,6 +87,16 @@ class _DriverPageState extends State<_DriverPage> {
   @override
   void initState() {
     super.initState();
+    _authSubscription = _db.auth.onAuthStateChange.listen((state) {
+      if (state.session != null) {
+        _run(_refresh);
+      } else if (mounted) {
+        setState(() {
+          _isDriver = false;
+          _isAvailable = false;
+        });
+      }
+    });
     if (_signedIn) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _run(_refresh));
     }
@@ -97,18 +114,12 @@ class _DriverPageState extends State<_DriverPage> {
     }
   }
 
-  Future<void> _sendOtp() => _run(() async {
-        await _db.auth.signInWithOtp(phone: _phone.text.trim());
-        _message = 'OTP requested. Enter the code sent to your phone.';
-      });
-
-  Future<void> _verifyOtp() => _run(() async {
-        await _db.auth.verifyOTP(
-          phone: _phone.text.trim(),
-          token: _otp.text.trim(),
-          type: OtpType.sms,
+  Future<void> _signInWithGoogle() => _run(() async {
+        await _db.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: driverRedirectUri,
         );
-        await _refresh();
+        _message = 'Continue in the browser to sign in with Google. You will return to Go-Ride Driver Partner.';
       });
 
   Future<void> _refresh() async {
@@ -191,12 +202,15 @@ class _DriverPageState extends State<_DriverPage> {
   Future<void> _submitApplication() async {
     await _run(() async {
       final user = _db.auth.currentUser;
-      if (user == null) throw StateError('Please verify your phone first.');
+      if (user == null) throw StateError('Please sign in with Google first.');
       final existing = await _db.from('driver_applications')
           .select('id,status')
           .eq('user_id', user.id)
           .order('created_at', ascending: false)
           .limit(1);
+      if (_name.text.trim().length < 2 || _phone.text.trim().length < 8 || _vehicle.text.trim().length < 2 || _registration.text.trim().length < 5) {
+        throw StateError('Enter your name, contact phone, vehicle model and registration number.');
+      }
       if ((existing as List).isNotEmpty) {
         final status = existing.first['status']?.toString() ?? 'pending';
         if (status != 'rejected') {
@@ -279,7 +293,7 @@ class _DriverPageState extends State<_DriverPage> {
   @override
   void dispose() {
     _phone.dispose();
-    _otp.dispose();
+    _authSubscription?.cancel();
     _name.dispose();
     _vehicle.dispose();
     _registration.dispose();
@@ -435,12 +449,21 @@ class _DriverPageState extends State<_DriverPage> {
           const SizedBox(height: 6),
           const Text('Apply to become a partner. Approval is required before availability or ride dispatch can be enabled.'),
           const SizedBox(height: 20),
-          TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number with country code', hintText: '+91XXXXXXXXXX')),
-          const SizedBox(height: 10),
-          FilledButton(onPressed: _busy ? null : _sendOtp, child: const Text('Send SMS OTP')),
-          const SizedBox(height: 10),
-          TextField(controller: _otp, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'SMS verification code')),
-          OutlinedButton(onPressed: _busy ? null : _verifyOtp, child: const Text('Verify phone')),
+          FilledButton.icon(
+            onPressed: _busy ? null : _signInWithGoogle,
+            icon: const Icon(Icons.login),
+            label: const Text('Continue with Google'),
+          ),
+          if (_signedIn) Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Card(
+              child: ListTile(
+                leading: const Icon(Icons.verified_user_outlined),
+                title: const Text('Google account signed in'),
+                subtitle: Text(_db.auth.currentUser?.email ?? 'Account authenticated'),
+              ),
+            ),
+          ),
           if (_signedIn && _application != null) ...[
             const SizedBox(height: 16),
             Card(
@@ -453,6 +476,8 @@ class _DriverPageState extends State<_DriverPage> {
           ],
           const Divider(height: 32),
           TextField(controller: _name, decoration: const InputDecoration(labelText: 'Full name')),
+          const SizedBox(height: 10),
+          TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Contact phone number with country code', hintText: '+91XXXXXXXXXX')),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             value: _category,
