@@ -1676,7 +1676,7 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
       } else if (widget.section == 'saved') {
         result = await client.from('saved_places').select('id,label,address,latitude,longitude,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(100);
       } else if (widget.section == 'support') {
-        result = await client.from('support_tickets').select('id,subject,message,status,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(50);
+        result = await client.from('support_tickets').select('id,subject,message,status,needs_human,priority,ai_attempt_count,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(50);
       } else {
         result = await client.from('profiles').select('full_name,phone,avatar_url,created_at').eq('id', user.id).maybeSingle();
       }
@@ -1731,9 +1731,28 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
     if(s.isEmpty || m.isEmpty) { setState(()=>error='Enter a subject and describe the issue.'); return; }
     setState(()=>saving=true);
     try {
-      await client.from('support_tickets').insert({'user_id':client.auth.currentUser!.id,'subject':s,'message':m});
+      final created = await client.from('support_tickets')
+          .insert({'user_id':client.auth.currentUser!.id,'subject':s,'message':m})
+          .select('id')
+          .single();
       subject.clear(); message.clear();
-      if(mounted) { setState(()=>notice='Support request submitted.'); await load(); }
+      var messageText = 'Support request submitted. Open the ticket to continue.';
+      try {
+        final response = await client.functions.invoke('ai-support-agent', body: {
+          'ticket_id': created['id'].toString(),
+          'message': m,
+        });
+        final data = response.data;
+        if (data is Map && data['status'] == 'escalated') {
+          messageText = 'Your request has been submitted and escalated to human support.';
+        } else if (data is Map && data['status'] == 'answered') {
+          messageText = 'Your request has been submitted. Go-Ride support has replied.';
+        }
+      } catch (aiError) {
+        debugPrint('AI support invocation failed; ticket remains in the Admin queue: $aiError');
+        messageText = 'Support request submitted. If AI support is unavailable, the Admin team can still review your ticket.';
+      }
+      if(mounted) { setState(()=>notice=messageText); await load(); }
     } catch (_) { if(mounted) setState(()=>error='Support request could not be submitted. Please try again.'); }
     finally { if(mounted) setState(()=>saving=false); }
   }
@@ -1812,14 +1831,200 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
         trailing:IconButton(tooltip:'Delete saved place',onPressed:()=>deleteSavedPlace(row['id'].toString()),icon:const Icon(Icons.delete_outline)),
       )),
       for(final row in rows) if(widget.section=='support') Card(child:ListTile(
-        leading:const Icon(Icons.support_agent,color:Color(0xFF087E72)),
+        leading:Icon(row['needs_human'] == true ? Icons.support_agent : Icons.chat_bubble_outline,color:row['priority'] == 'urgent' ? Colors.red : const Color(0xFF087E72)),
         title:Text(row['subject']?.toString() ?? 'Support request'),
-        subtitle:Text('${row['message'] ?? ''}\nStatus: ${row['status'] ?? 'open'}',maxLines:4,overflow:TextOverflow.ellipsis),
+        subtitle:Text('${row['message'] ?? ''}\nStatus: ${row['status'] ?? 'open'} · Priority: ${row['priority'] ?? 'normal'}${row['needs_human'] == true ? ' · Human support' : ''}',maxLines:4,overflow:TextOverflow.ellipsis),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push<void>(MaterialPageRoute<void>(
+          builder: (_) => SupportTicketChatScreen(ticketId: row['id'].toString(), subject: row['subject']?.toString() ?? 'Support request'),
+        )),
       )),
     ]))),
   );
 }
 
+
+class SupportTicketChatScreen extends StatefulWidget {
+  const SupportTicketChatScreen({super.key, required this.ticketId, required this.subject});
+  final String ticketId;
+  final String subject;
+
+  @override
+  State<SupportTicketChatScreen> createState() => _SupportTicketChatScreenState();
+}
+
+class _SupportTicketChatScreenState extends State<SupportTicketChatScreen> {
+  final TextEditingController _message = TextEditingController();
+  List<Map<String, dynamic>> _messages = [];
+  bool _loading = true;
+  bool _sending = false;
+  bool _needsHuman = false;
+  String _status = 'open';
+  String? _error;
+  String? _notice;
+
+  SupabaseClient get _client => Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _message.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      final results = await Future.wait([
+        _client.from('support_ticket_messages')
+            .select('id,author_type,content,created_at')
+            .eq('ticket_id', widget.ticketId)
+            .order('created_at'),
+        _client.from('support_tickets')
+            .select('status,needs_human')
+            .eq('id', widget.ticketId)
+            .maybeSingle(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _messages = List<Map<String, dynamic>>.from(results[0] as List);
+        final ticket = results[1] as Map<String, dynamic>?;
+        _status = ticket?['status']?.toString() ?? 'open';
+        _needsHuman = ticket?['needs_human'] == true;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Could not load this conversation. Refresh and try again.');
+      debugPrint('Support conversation load failed: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _send({bool requestHuman = false}) async {
+    final content = requestHuman ? 'Please connect me to a human support agent.' : _message.text.trim();
+    if (content.isEmpty || _sending) return;
+    setState(() { _sending = true; _error = null; _notice = null; });
+    try {
+      final response = await _client.functions.invoke('ai-support-agent', body: {
+        'ticket_id': widget.ticketId,
+        'message': content,
+        'request_human': requestHuman,
+      });
+      if (response.status >= 400) throw Exception('support_function_failed');
+      _message.clear();
+      final data = response.data;
+      if (mounted) {
+        setState(() => _notice = data is Map && data['status'] == 'escalated'
+            ? 'Your conversation has been escalated to human support.'
+            : 'Go-Ride support has replied.');
+      }
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Message could not be sent. Your original ticket is still saved and visible to the Admin team.');
+      debugPrint('Support message send failed: $error');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(widget.subject), actions: [
+          IconButton(onPressed: _loading ? null : _load, tooltip: 'Refresh conversation', icon: const Icon(Icons.refresh)),
+        ]),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                color: _needsHuman ? Theme.of(context).colorScheme.errorContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Text(
+                  'Status: ' + _status + (_needsHuman ? ' · Human support requested' : ''),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Message(text: _error!, isError: true)),
+              if (_notice != null) Padding(padding: const EdgeInsets.all(8), child: Message(text: _notice!)),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          if (_messages.isEmpty) const Text('Send a message to start this support conversation.'),
+                          for (final item in _messages)
+                            Align(
+                              alignment: item['author_type'] == 'customer' ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 560),
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: item['author_type'] == 'customer'
+                                      ? Theme.of(context).colorScheme.primaryContainer
+                                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item['author_type'] == 'customer' ? 'You'
+                                          : item['author_type'] == 'ai_agent' ? 'Go-Ride AI support'
+                                          : item['author_type'] == 'admin' ? 'Go-Ride support team'
+                                          : 'System update',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(item['content']?.toString() ?? ''),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _message,
+                      minLines: 1,
+                      maxLines: 4,
+                      decoration: const InputDecoration(labelText: 'Reply to support', border: OutlineInputBorder()),
+                      enabled: !_sending && _status != 'closed' && _status != 'resolved',
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _sending || _status == 'closed' || _status == 'resolved' ? null : () => _send(requestHuman: true),
+                          icon: const Icon(Icons.support_agent),
+                          label: const Text('Human support'),
+                        ),
+                        const Spacer(),
+                        FilledButton.icon(
+                          onPressed: _sending || _status == 'closed' || _status == 'resolved' ? null : () => _send(),
+                          icon: const Icon(Icons.send),
+                          label: Text(_sending ? 'Sending…' : 'Send'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key, this.backendReady = true});
