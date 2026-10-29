@@ -1,0 +1,38 @@
+-- Go-Ride scheduled AI jobs template.
+-- First enable pg_cron, pg_net and Vault in Supabase Database Extensions.
+-- Add the same AI_CRON_SECRET value to Edge Function secrets, then store it in Vault:
+-- select vault.create_secret('https://rwbavyjpzyzijjwgtyqv.supabase.co', 'go_ride_project_url');
+-- select vault.create_secret('<SAME_AI_CRON_SECRET_VALUE>', 'go_ride_ai_cron_secret');
+--
+-- Run these schedule statements once, after the Vault secrets exist.
+-- Daily report at 00:00 IST (18:30 UTC).
+select cron.schedule(
+  'go-ride-daily-ai-report',
+  '30 18 * * *',
+  $job$
+    select net.http_post(
+      url := (select decrypted_secret from vault.decrypted_secrets where name = 'go_ride_project_url') || '/functions/v1/ai-daily-report',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'go_ride_ai_cron_secret')
+      ),
+      body := '{}'::jsonb
+    );
+  $job$
+);
+
+-- Security audit at 00:10 IST (18:40 UTC).
+select cron.schedule(
+  'go-ride-security-audit',
+  '40 18 * * *',
+  $job$
+    select net.http_post(
+      url := (select decrypted_secret from vault.decrypted_secrets where name = 'go_ride_project_url') || '/functions/v1/ai-security-audit',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'go_ride_ai_cron_secret')
+      ),
+      body := '{}'::jsonb
+    );
+  $job$
+);
