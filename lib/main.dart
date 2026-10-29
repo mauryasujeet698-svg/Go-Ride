@@ -1551,7 +1551,11 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
     _ => 'Ride status: $status',
   };
   IconData categoryIcon(String category) => switch (category.toUpperCase()) {
-    'AUTO' => Icons.electric_rickshaw, 'MINI' => Icons.directions_car_filled, 'SEDAN' => Icons.local_taxi, _ => Icons.directions_car,
+    'BIKE' => Icons.two_wheeler,
+    'AUTO' => Icons.electric_rickshaw,
+    'MINI' => Icons.directions_car_filled,
+    'SEDAN' => Icons.local_taxi,
+    _ => Icons.directions_car,
   };
 }
 
