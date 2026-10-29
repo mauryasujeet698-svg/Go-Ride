@@ -117,7 +117,7 @@ jobs:
               for permission in permissions:
                   tag = '<uses-permission android:name="' + permission + '" />'
                   if tag not in content:
-                      content = content.replace("<application", "    " + tag + "\\n    <application", 1)
+                      content = content.replace("<application", "    " + tag + "\n    <application", 1)
           if "login-callback" not in content:
               callback = """            <intent-filter>
                           <action android:name="android.intent.action.VIEW" />
