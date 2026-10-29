@@ -19,7 +19,8 @@ void main() {
       home: PreviewHomeScreen(backendReady: false),
     ));
     await tester.pump();
-    await tester.tap(find.byWidgetPredicate((widget) => widget is NavigationDestination && widget.label == 'Services'));
+    final navigationBar = tester.getRect(find.byType(NavigationBar));
+    await tester.tapAt(Offset(navigationBar.left + navigationBar.width * 0.375, navigationBar.center.dy));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
