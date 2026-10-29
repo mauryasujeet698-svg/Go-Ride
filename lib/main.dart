@@ -131,6 +131,92 @@ class PlaceResult {
   final GeoPoint point;
 }
 
+Future<List<PlaceResult>> geocodePlaces(
+  String query, {
+  required String mapboxToken,
+  required String nominatim,
+  int limit = 5,
+}) async {
+  if (mapboxToken.isNotEmpty) {
+    final uri = Uri.parse(
+      'https://api.mapbox.com/geocoding/v5/mapbox.places/${Uri.encodeComponent(query)}.json',
+    ).replace(queryParameters: {
+      'access_token': mapboxToken,
+      'country': 'IN',
+      'language': 'en',
+      'limit': limit.toString(),
+      'autocomplete': 'true',
+    });
+    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    if (response.statusCode != 200) {
+      throw Exception('Mapbox address search is temporarily unavailable. Try again shortly.');
+    }
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final features = (payload['features'] as List?) ?? [];
+    return features.map((item) {
+      final feature = Map<String, dynamic>.from(item as Map);
+      final center = (feature['center'] as List).cast<num>();
+      return PlaceResult(
+        label: feature['place_name']?.toString() ?? query,
+        point: GeoPoint(center[1].toDouble(), center[0].toDouble()),
+      );
+    }).toList();
+  }
+
+  final uri = Uri.parse('$nominatim/search').replace(queryParameters: {
+    'q': query,
+    'format': 'jsonv2',
+    'limit': limit.toString(),
+    'addressdetails': '1',
+    'countrycodes': 'in',
+  });
+  final response = await http.get(
+    uri,
+    headers: {'User-Agent': 'GoRideCustomer/1.0 (support: app)'},
+  ).timeout(const Duration(seconds: 12));
+  if (response.statusCode != 200) {
+    throw Exception('Address search is temporarily unavailable. Try again shortly.');
+  }
+  final rows = (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  return rows.map((item) => PlaceResult(
+    label: item['display_name']?.toString() ?? query,
+    point: GeoPoint(
+      double.parse(item['lat'].toString()),
+      double.parse(item['lon'].toString()),
+    ),
+  )).toList();
+}
+
+Future<String?> reverseGeocode(
+  GeoPoint point, {
+  required String mapboxToken,
+  required String nominatim,
+}) async {
+  if (mapboxToken.isNotEmpty) {
+    final uri = Uri.parse(
+      'https://api.mapbox.com/geocoding/v5/mapbox.places/${point.longitude},${point.latitude}.json',
+    ).replace(queryParameters: {
+      'access_token': mapboxToken,
+      'country': 'IN',
+      'language': 'en',
+      'limit': '1',
+    });
+    final response = await http.get(uri).timeout(const Duration(seconds: 8));
+    if (response.statusCode != 200) return null;
+    final features = ((jsonDecode(response.body) as Map<String, dynamic>)['features'] as List?) ?? [];
+    if (features.isEmpty) return null;
+    return (features.first as Map<String, dynamic>)['place_name']?.toString();
+  }
+  final uri = Uri.parse('$nominatim/reverse').replace(queryParameters: {
+    'format': 'jsonv2',
+    'lat': point.latitude.toString(),
+    'lon': point.longitude.toString(),
+  });
+  final response = await http.get(uri, headers: {'User-Agent': 'GoRideCustomer/1.0'}).timeout(const Duration(seconds: 8));
+  if (response.statusCode != 200) return null;
+  return (jsonDecode(response.body) as Map<String, dynamic>)['display_name']?.toString();
+}
+
 class GuestFare {
   const GuestFare({required this.category, required this.amountMinor, required this.currency, required this.etaSeconds});
   final String category;
@@ -180,8 +266,12 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
       pickupPoint = GeoPoint(p.latitude, p.longitude);
       pickup.text = '${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}';
       try {
-        final r = await http.get(Uri.parse('$_nominatim/reverse?format=jsonv2&lat=${p.latitude}&lon=${p.longitude}'), headers: {'User-Agent':'GoRideCustomer/0.1'}).timeout(const Duration(seconds: 8));
-        if (r.statusCode == 200) pickup.text = (jsonDecode(r.body) as Map<String,dynamic>)['display_name']?.toString() ?? pickup.text;
+        final label = await reverseGeocode(
+          GeoPoint(p.latitude, p.longitude),
+          mapboxToken: _mapboxToken,
+          nominatim: _nominatim,
+        );
+        if (label != null && label.isNotEmpty) pickup.text = label;
       } catch (_) {}
       _moveMap(pickupPoint!);
       if (mounted) setState(() => info = 'Pickup location set.');
@@ -194,12 +284,12 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
     if (query.isEmpty) { setState(() => error = 'Enter an address to search.'); return; }
     setState(() { busy = true; error = null; });
     try {
-      final uri = Uri.parse('$_nominatim/search').replace(queryParameters: {'q': query, 'format':'jsonv2', 'limit':'5', 'addressdetails':'1', 'countrycodes':'in'});
-      final response = await http.get(uri, headers: {'User-Agent':'GoRideCustomer/0.1'}).timeout(const Duration(seconds: 12));
-      if (response.statusCode != 200) throw Exception('Address search is temporarily unavailable. Try again shortly.');
-      final rows = (jsonDecode(response.body) as List).cast<Map<String,dynamic>>();
-      if (rows.isEmpty) throw Exception('No matching address found. Try adding the city or area.');
-      final options = rows.map((m) => PlaceResult(label: m['display_name'].toString(), point: GeoPoint(double.parse(m['lat'].toString()), double.parse(m['lon'].toString())))).toList();
+      final options = await geocodePlaces(
+        query,
+        mapboxToken: _mapboxToken,
+        nominatim: _nominatim,
+      );
+      if (options.isEmpty) throw Exception('No matching address found. Try adding the city or area.');
       if (!mounted) return;
       if (options.length == 1) { _selectPlace(options.first, forPickup: forPickup); }
       else {
@@ -240,30 +330,13 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
     if (query.isEmpty) throw Exception('Enter both a pickup and destination.');
     final withCountry = RegExp(r'\bIndia\b', caseSensitive: false).hasMatch(query)
         ? query : '$query, India';
-    final uri = Uri.parse('$_nominatim/search').replace(queryParameters: {
-      'q': withCountry,
-      'format': 'jsonv2',
-      'limit': '5',
-      'addressdetails': '1',
-      'countrycodes': 'in',
-    });
-    final response = await http.get(
-      uri,
-      headers: {'User-Agent': 'GoRideCustomer/1.0 (support: app)'},
-    ).timeout(const Duration(seconds: 12));
-    if (response.statusCode != 200) {
-      throw Exception('Address search is temporarily unavailable. Try again shortly.');
-    }
-    final rows = (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
-    if (rows.isEmpty) throw Exception('No matching place found for "$query". Add the nearby town or district.');
-    final place = rows.first;
-    return PlaceResult(
-      label: place['display_name']?.toString() ?? query,
-      point: GeoPoint(
-        double.parse(place['lat'].toString()),
-        double.parse(place['lon'].toString()),
-      ),
+    final options = await geocodePlaces(
+      withCountry,
+      mapboxToken: _mapboxToken,
+      nominatim: _nominatim,
     );
+    if (options.isEmpty) throw Exception('No matching place found for "$query". Add the nearby town or district.');
+    return options.first;
   }
 
   Future<void> getRouteAndFares() async {
