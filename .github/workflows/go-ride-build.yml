@@ -91,13 +91,14 @@ jobs:
           content = manifest.read_text()
           scheme = os.environ["OAUTH_REDIRECT_SCHEME"]
           if "login-callback" not in content:
-              callback = f\'''            <intent-filter>
+              callback = """            <intent-filter>
                           <action android:name="android.intent.action.VIEW" />
                           <category android:name="android.intent.category.DEFAULT" />
                           <category android:name="android.intent.category.BROWSABLE" />
-                          <data android:scheme="{scheme}" android:host="login-callback" />
+                          <data android:scheme="__SCHEME__" android:host="login-callback" />
                       </intent-filter>
-          \'''
+          """
+              callback = callback.replace("__SCHEME__", scheme)
               content = content.replace("</activity>", callback + "        </activity>", 1)
               manifest.write_text(content)
           PY
