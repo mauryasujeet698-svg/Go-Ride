@@ -96,9 +96,11 @@ class _DriverPageState extends State<_DriverPage> {
       if (state.session != null) {
         _run(_refresh);
       } else if (mounted) {
+        _stopLocationStream();
         setState(() {
           _isDriver = false;
           _isAvailable = false;
+          _driverStatus = 'offline';
         });
       }
     });
@@ -432,15 +434,20 @@ class _DriverPageState extends State<_DriverPage> {
               icon: const Icon(Icons.refresh),
             ),
             IconButton(
-              tooltip: 'Sign out',
-              onPressed: _busy ? null : () async {
+              tooltip: _driverStatus == 'on_trip' ? 'Finish the active ride before signing out' : 'Sign out',
+              onPressed: _busy || _driverStatus == 'on_trip' ? null : () => _run(() async {
+                if (_driverStatus == 'available' && _areaId != null) {
+                  await _db.rpc('driver_set_availability', params: {'p_area_id': _areaId, 'p_available': false});
+                }
+                await _stopLocationStream();
                 await _db.auth.signOut();
                 if (mounted) setState(() {
                   _isDriver = false;
                   _isAvailable = false;
+                  _driverStatus = 'offline';
                   _message = 'Signed out.';
                 });
-              },
+              }),
               icon: const Icon(Icons.logout),
             ),
           ],
