@@ -29,7 +29,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: dart format lib test
-      - run: flutter analyze --no-fatal-infos
+      - run: flutter analyze --no-fatal-infos lib test
       - run: flutter test --reporter expanded
       - name: Build ABI-split APKs
         env:
