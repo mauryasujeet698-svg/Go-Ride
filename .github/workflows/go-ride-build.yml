@@ -29,10 +29,20 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: dart format lib test
-      - run: flutter analyze --no-fatal-infos
+      - run: flutter analyze --no-fatal-infos lib test
       - run: flutter test --reporter expanded
       - name: Build ABI-split APKs
-        run: flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          args=()
+          [[ -n "$SUPABASE_URL" ]] && args+=(--dart-define="SUPABASE_URL=$SUPABASE_URL")
+          [[ -n "$SUPABASE_PUBLISHABLE_KEY" ]] && args+=(--dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY")
+          [[ -n "$MAPBOX_ACCESS_TOKEN" ]] && args+=(--dart-define="MAPBOX_ACCESS_TOKEN=$MAPBOX_ACCESS_TOKEN")
+          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols "${args[@]}"
       - name: Enforce APK size limit
         shell: bash
         run: |
@@ -48,5 +58,106 @@ jobs:
         with:
           name: go-ride-customer-apks
           path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  build-partner-apps:
+    name: Build ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: admin
+            path: apps/admin
+            oauth_scheme: io.supabase.gorideadmin
+            app_label: 'Go-Ride Admin'
+          - app: driver-partner
+            path: apps/driver_partner
+            oauth_scheme: io.supabase.goridedriver
+            app_label: 'Go-Ride Driver Partner'
+    defaults:
+      run:
+        working-directory: ${{ matrix.path }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.3'
+          channel: stable
+          cache: true
+      - name: Generate Android platform files
+        run: flutter create --platforms=android --org com.alteo .
+      - name: Configure Google OAuth callback
+        env:
+          OAUTH_REDIRECT_SCHEME: ${{ matrix.oauth_scheme }}
+          APP_LABEL: ${{ matrix.app_label }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          content = manifest.read_text()
+          scheme = os.environ["OAUTH_REDIRECT_SCHEME"]
+          label = os.environ["APP_LABEL"]
+          content = re.sub(r'android:label="[^"]*"', 'android:label="' + label + '"', content, count=1)
+          if scheme == "io.supabase.goridedriver":
+              permissions = [
+                  "android.permission.ACCESS_COARSE_LOCATION",
+                  "android.permission.ACCESS_FINE_LOCATION",
+                  "android.permission.FOREGROUND_SERVICE",
+                  "android.permission.FOREGROUND_SERVICE_LOCATION",
+                  "android.permission.POST_NOTIFICATIONS",
+              ]
+              for permission in permissions:
+                  tag = '<uses-permission android:name="' + permission + '" />'
+                  if tag not in content:
+                      content = content.replace("<application", "    " + tag + "\n    <application", 1)
+          if "login-callback" not in content:
+              callback = """            <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
+                          <data android:scheme="__SCHEME__" android:host="login-callback" />
+                      </intent-filter>
+          """
+              callback = callback.replace("__SCHEME__", scheme)
+              content = content.replace("</activity>", callback + "        </activity>", 1)
+              manifest.write_text(content)
+          PY
+      - run: flutter pub get
+      - run: dart format lib
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test --reporter expanded
+      - name: Build ABI-split APKs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        shell: bash
+        run: |
+          args=()
+          [[ -n "$SUPABASE_URL" ]] && args+=(--dart-define="SUPABASE_URL=$SUPABASE_URL")
+          [[ -n "$SUPABASE_PUBLISHABLE_KEY" ]] && args+=(--dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY")
+          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols "${args[@]}"
+      - name: Enforce APK size limit
+        shell: bash
+        run: |
+          shopt -s nullglob
+          apks=(build/app/outputs/flutter-apk/*.apk)
+          test "${#apks[@]}" -gt 0
+          for apk in "${apks[@]}"; do
+            size=$(stat -c%s "$apk")
+            echo "$apk: $size bytes"
+            if (( size > 25 * 1024 * 1024 )); then echo "APK exceeds 25 MiB"; exit 1; fi
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-ride-${{ matrix.app }}-apks
+          path: ${{ matrix.path }}/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
           retention-days: 14

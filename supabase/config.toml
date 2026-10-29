@@ -1,0 +1,13 @@
+project_id = "go-ride"
+
+[functions.estimate-route-fares]
+verify_jwt = false
+
+[functions.ai-daily-report]
+verify_jwt = false
+
+[functions.ai-support-agent]
+verify_jwt = false
+
+[functions.ai-security-audit]
+verify_jwt = false

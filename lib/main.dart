@@ -131,6 +131,103 @@ class PlaceResult {
   final GeoPoint point;
 }
 
+Future<List<PlaceResult>> geocodePlaces(
+  String query, {
+  required String mapboxToken,
+  required String nominatim,
+  int limit = 5,
+}) async {
+  if (mapboxToken.isNotEmpty) {
+    try {
+      final uri = Uri.parse(
+        'https://api.mapbox.com/geocoding/v5/mapbox.places/${Uri.encodeComponent(query)}.json',
+      ).replace(queryParameters: {
+        'access_token': mapboxToken,
+        'country': 'IN',
+        'language': 'en',
+        'limit': limit.toString(),
+        'autocomplete': 'true',
+      });
+      final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final payload = jsonDecode(response.body) as Map<String, dynamic>;
+        final features = (payload['features'] as List?) ?? [];
+        if (features.isNotEmpty) {
+          return features.map((item) {
+            final feature = Map<String, dynamic>.from(item as Map);
+            final center = (feature['center'] as List).cast<num>();
+            return PlaceResult(
+              label: feature['place_name']?.toString() ?? query,
+              point: GeoPoint(center[1].toDouble(), center[0].toDouble()),
+            );
+          }).toList();
+        }
+      }
+    } catch (_) {
+      // Fall back to the OSM geocoder if Mapbox is unavailable.
+    }
+  }
+
+  final uri = Uri.parse('$nominatim/search').replace(queryParameters: {
+    'q': query,
+    'format': 'jsonv2',
+    'limit': limit.toString(),
+    'addressdetails': '1',
+    'countrycodes': 'in',
+  });
+  final response = await http.get(
+    uri,
+    headers: {'User-Agent': 'GoRideCustomer/1.0 (support: app)'},
+  ).timeout(const Duration(seconds: 12));
+  if (response.statusCode != 200) {
+    throw Exception('Address search is temporarily unavailable. Try again shortly.');
+  }
+  final rows = (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  return rows.map((item) => PlaceResult(
+    label: item['display_name']?.toString() ?? query,
+    point: GeoPoint(
+      double.parse(item['lat'].toString()),
+      double.parse(item['lon'].toString()),
+    ),
+  )).toList();
+}
+
+Future<String?> reverseGeocode(
+  GeoPoint point, {
+  required String mapboxToken,
+  required String nominatim,
+}) async {
+  if (mapboxToken.isNotEmpty) {
+    try {
+      final uri = Uri.parse(
+        'https://api.mapbox.com/geocoding/v5/mapbox.places/${point.longitude},${point.latitude}.json',
+      ).replace(queryParameters: {
+        'access_token': mapboxToken,
+        'country': 'IN',
+        'language': 'en',
+        'limit': '1',
+      });
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        final features = ((jsonDecode(response.body) as Map<String, dynamic>)['features'] as List?) ?? [];
+        if (features.isNotEmpty) {
+          return (features.first as Map<String, dynamic>)['place_name']?.toString();
+        }
+      }
+    } catch (_) {
+      // Fall back to the OSM reverse geocoder.
+    }
+  }
+  final uri = Uri.parse('$nominatim/reverse').replace(queryParameters: {
+    'format': 'jsonv2',
+    'lat': point.latitude.toString(),
+    'lon': point.longitude.toString(),
+  });
+  final response = await http.get(uri, headers: {'User-Agent': 'GoRideCustomer/1.0'}).timeout(const Duration(seconds: 8));
+  if (response.statusCode != 200) return null;
+  return (jsonDecode(response.body) as Map<String, dynamic>)['display_name']?.toString();
+}
+
 class GuestFare {
   const GuestFare({required this.category, required this.amountMinor, required this.currency, required this.etaSeconds});
   final String category;
@@ -147,7 +244,10 @@ class PreviewHomeScreen extends StatefulWidget {
 }
 
 class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
-  static const _tileUrl = String.fromEnvironment('OSM_TILE_URL', defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+  static const _mapboxToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
+  static const _osmTileUrl = String.fromEnvironment('OSM_TILE_URL', defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+  static const _mapboxTileUrl = 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token={accessToken}';
+  static String get _tileUrl => _mapboxToken.isEmpty ? _osmTileUrl : _mapboxTileUrl;
   static const _nominatim = String.fromEnvironment('GEOCODER_URL', defaultValue: 'https://nominatim.openstreetmap.org');
   static const _osrm = String.fromEnvironment('ROUTING_URL', defaultValue: 'https://router.project-osrm.org');
   final pickup = TextEditingController();
@@ -177,8 +277,12 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
       pickupPoint = GeoPoint(p.latitude, p.longitude);
       pickup.text = '${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}';
       try {
-        final r = await http.get(Uri.parse('$_nominatim/reverse?format=jsonv2&lat=${p.latitude}&lon=${p.longitude}'), headers: {'User-Agent':'GoRideCustomer/0.1'}).timeout(const Duration(seconds: 8));
-        if (r.statusCode == 200) pickup.text = (jsonDecode(r.body) as Map<String,dynamic>)['display_name']?.toString() ?? pickup.text;
+        final label = await reverseGeocode(
+          GeoPoint(p.latitude, p.longitude),
+          mapboxToken: _mapboxToken,
+          nominatim: _nominatim,
+        );
+        if (label != null && label.isNotEmpty) pickup.text = label;
       } catch (_) {}
       _moveMap(pickupPoint!);
       if (mounted) setState(() => info = 'Pickup location set.');
@@ -191,12 +295,12 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
     if (query.isEmpty) { setState(() => error = 'Enter an address to search.'); return; }
     setState(() { busy = true; error = null; });
     try {
-      final uri = Uri.parse('$_nominatim/search').replace(queryParameters: {'q': query, 'format':'jsonv2', 'limit':'5', 'addressdetails':'1', 'countrycodes':'in'});
-      final response = await http.get(uri, headers: {'User-Agent':'GoRideCustomer/0.1'}).timeout(const Duration(seconds: 12));
-      if (response.statusCode != 200) throw Exception('Address search is temporarily unavailable. Try again shortly.');
-      final rows = (jsonDecode(response.body) as List).cast<Map<String,dynamic>>();
-      if (rows.isEmpty) throw Exception('No matching address found. Try adding the city or area.');
-      final options = rows.map((m) => PlaceResult(label: m['display_name'].toString(), point: GeoPoint(double.parse(m['lat'].toString()), double.parse(m['lon'].toString())))).toList();
+      final options = await geocodePlaces(
+        query,
+        mapboxToken: _mapboxToken,
+        nominatim: _nominatim,
+      );
+      if (options.isEmpty) throw Exception('No matching address found. Try adding the city or area.');
       if (!mounted) return;
       if (options.length == 1) { _selectPlace(options.first, forPickup: forPickup); }
       else {
@@ -237,30 +341,13 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
     if (query.isEmpty) throw Exception('Enter both a pickup and destination.');
     final withCountry = RegExp(r'\bIndia\b', caseSensitive: false).hasMatch(query)
         ? query : '$query, India';
-    final uri = Uri.parse('$_nominatim/search').replace(queryParameters: {
-      'q': withCountry,
-      'format': 'jsonv2',
-      'limit': '5',
-      'addressdetails': '1',
-      'countrycodes': 'in',
-    });
-    final response = await http.get(
-      uri,
-      headers: {'User-Agent': 'GoRideCustomer/1.0 (support: app)'},
-    ).timeout(const Duration(seconds: 12));
-    if (response.statusCode != 200) {
-      throw Exception('Address search is temporarily unavailable. Try again shortly.');
-    }
-    final rows = (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
-    if (rows.isEmpty) throw Exception('No matching place found for "$query". Add the nearby town or district.');
-    final place = rows.first;
-    return PlaceResult(
-      label: place['display_name']?.toString() ?? query,
-      point: GeoPoint(
-        double.parse(place['lat'].toString()),
-        double.parse(place['lon'].toString()),
-      ),
+    final options = await geocodePlaces(
+      withCountry,
+      mapboxToken: _mapboxToken,
+      nominatim: _nominatim,
     );
+    if (options.isEmpty) throw Exception('No matching place found for "$query". Add the nearby town or district.');
+    return options.first;
   }
 
   Future<void> getRouteAndFares() async {
@@ -870,6 +957,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                     children: [
                       TileLayer(
                         urlTemplate: _tileUrl,
+                        additionalOptions: const {'accessToken': _mapboxToken},
                         userAgentPackageName: 'com.goride.customer',
                         maxZoom: 19,
                       ),
@@ -907,7 +995,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
                               ),
                               width: 42,
                               height: 42,
-                              child: const Icon(
+                              child: Icon(
                                 Icons.location_pin,
                                 color: Theme.of(context).colorScheme.primary,
                                 size: 40,
@@ -1037,59 +1125,19 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
             setState(() => planningRoute = false);
             return;
           }
-          if (index == 2) { Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => const ParcelScreen())); return; }
-          if (index == 3) { openSection('account'); return; }
-          showModalBottomSheet<void>(
-            context: context,
-            showDragHandle: true,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            builder: (sheetContext) => SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Ride services',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    if (fares.isEmpty)
-                      const Text(
-                        'Enter a destination and get fares to view available ride types. Prices shown here come from the fare service.',
-                      ),
-                    for (final fare in fares)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          fare.category == 'BIKE'
-                              ? Icons.two_wheeler
-                              : fare.category == 'AUTO'
-                              ? Icons.electric_rickshaw
-                              : fare.category == 'MINI'
-                                  ? Icons.directions_car_filled
-                                  : Icons.local_taxi,
-                          size: 30,
-                        ),
-                        title: Text(fare.category),
-                        subtitle: Text(
-                          'Estimated arrival ${(fare.etaSeconds / 60).ceil()} min',
-                        ),
-                        trailing: Text(
-                          '${fare.currency} ${(fare.amountMinor / 100).toStringAsFixed(0)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onTap: () {
-                          Navigator.of(sheetContext).pop();
-                          book(fare);
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          );
+          if (index == 1) {
+            Navigator.of(context, rootNavigator: true).push<void>(
+              MaterialPageRoute<void>(builder: (_) => const ServicesScreen()),
+            );
+            return;
+          }
+          if (index == 2) {
+            Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(builder: (_) => const ParcelScreen()),
+            );
+            return;
+          }
+          if (index == 3) openSection('account');
         },
         destinations: const [
           NavigationDestination(
@@ -1220,7 +1268,10 @@ class RideHomeScreen extends StatefulWidget {
   State<RideHomeScreen> createState() => _RideHomeScreenState();
 }
 class _RideHomeScreenState extends State<RideHomeScreen> {
-  static const _tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const _mapboxToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
+  static const _osmTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const _mapboxTileUrl = 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token={accessToken}';
+  static String get _tileUrl => _mapboxToken.isEmpty ? _osmTileUrl : _mapboxTileUrl;
   static const _routingUrl = 'https://router.project-osrm.org';
   final pickupText = TextEditingController();
   final destinationText = TextEditingController();
@@ -1281,8 +1332,16 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
     final b = destination;
     if (a == null || b == null) return;
     try {
-      final uri = Uri.parse('$_routingUrl/route/v1/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}')
-          .replace(queryParameters: {'overview': 'full', 'geometries': 'geojson', 'steps': 'false'});
+      final uri = _mapboxToken.isNotEmpty
+          ? Uri.parse('https://api.mapbox.com/directions/v5/mapbox/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}')
+              .replace(queryParameters: {
+                'overview': 'full',
+                'geometries': 'geojson',
+                'steps': 'false',
+                'access_token': _mapboxToken,
+              })
+          : Uri.parse('$_routingUrl/route/v1/driving/${a.longitude},${a.latitude};${b.longitude},${b.latitude}')
+              .replace(queryParameters: {'overview': 'full', 'geometries': 'geojson', 'steps': 'false'});
       final response = await http.get(uri).timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) return;
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1471,7 +1530,7 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
               onTap: _mapTap,
             ),
             children: [
-              TileLayer(urlTemplate: _tileUrl, userAgentPackageName: 'com.goride.customer', maxZoom: 19),
+              TileLayer(urlTemplate: _tileUrl, additionalOptions: const {'accessToken': _mapboxToken}, userAgentPackageName: 'com.goride.customer', maxZoom: 19),
               if (routePoints.isNotEmpty)
                 PolylineLayer(polylines: [Polyline(points: routePoints, color: Colors.white, strokeWidth: 5)]),
               MarkerLayer(markers: [
@@ -1562,44 +1621,17 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
       selectedIndex: 0,
       onDestinationSelected: (index) {
         if (index == 0) return;
+        if (index == 1) {
+          Navigator.of(context, rootNavigator: true).push<void>(
+            MaterialPageRoute<void>(builder: (_) => const ServicesScreen()),
+          );
+          return;
+        }
         if (index == 2 || index == 3) {
           Navigator.of(context).push<void>(MaterialPageRoute<void>(
             builder: (_) => CustomerSectionScreen(section: index == 2 ? 'history' : 'profile'),
           ));
-          return;
         }
-        showModalBottomSheet<void>(
-          context: context,
-          showDragHandle: true,
-          backgroundColor: const Color(0xFF202020),
-          builder: (sheetContext) => SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Ride services', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  if (quotes.isEmpty)
-                    const Text('Enter a destination and get fares to view available ride types. Prices shown here come from the live fare service.'),
-                  for (final q in quotes)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(categoryIcon(q.category), size: 30),
-                      title: Text(q.category),
-                      subtitle: Text('Estimated arrival ${(q.etaSeconds / 60).ceil()} min'),
-                      trailing: Text('${q.currency} ${(q.amountMinor / 100).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        book(q);
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
       },
       destinations: const [
         NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
@@ -1618,8 +1650,83 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
     _ => 'Ride status: $status',
   };
   IconData categoryIcon(String category) => switch (category.toUpperCase()) {
-    'AUTO' => Icons.electric_rickshaw, 'MINI' => Icons.directions_car_filled, 'SEDAN' => Icons.local_taxi, _ => Icons.directions_car,
+    'BIKE' => Icons.two_wheeler,
+    'AUTO' => Icons.electric_rickshaw,
+    'MINI' => Icons.directions_car_filled,
+    'SEDAN' => Icons.local_taxi,
+    _ => Icons.directions_car,
   };
+}
+
+class ServicesScreen extends StatelessWidget {
+  const ServicesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Services')),
+    body: ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          'Choose a service',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Select a Go-Ride service to continue.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: const CircleAvatar(child: Icon(Icons.local_taxi_outlined)),
+            title: const Text('Ride Booking'),
+            subtitle: const Text('Book a ride and compare available vehicle types.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).pop(),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: const CircleAvatar(child: Icon(Icons.inventory_2_outlined)),
+            title: const Text('Parcel Delivery'),
+            subtitle: const Text('Arrange a local pickup and delivery.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(builder: (_) => const ParcelScreen()),
+            ),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: const CircleAvatar(child: Icon(Icons.restaurant_outlined)),
+            title: const Text('Food Delivery'),
+            subtitle: const Text('Coming soon'),
+            trailing: const Icon(Icons.lock_outline),
+            enabled: false,
+          ),
+        ),
+        Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: const CircleAvatar(child: Icon(Icons.shopping_bag_outlined)),
+            title: const Text('Shopping & Quick Commerce'),
+            subtitle: const Text('Coming soon'),
+            trailing: const Icon(Icons.lock_outline),
+            enabled: false,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Only services marked as available can accept real bookings. Other services will be enabled after their backend workflows are ready.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    ),
+  );
 }
 
 class CustomerSectionScreen extends StatefulWidget {
@@ -1668,7 +1775,7 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
       } else if (widget.section == 'saved') {
         result = await client.from('saved_places').select('id,label,address,latitude,longitude,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(100);
       } else if (widget.section == 'support') {
-        result = await client.from('support_tickets').select('id,subject,message,status,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(50);
+        result = await client.from('support_tickets').select('id,subject,message,status,needs_human,priority,ai_attempt_count,created_at').eq('user_id', user.id).order('created_at', ascending: false).limit(50);
       } else {
         result = await client.from('profiles').select('full_name,phone,avatar_url,created_at').eq('id', user.id).maybeSingle();
       }
@@ -1723,9 +1830,28 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
     if(s.isEmpty || m.isEmpty) { setState(()=>error='Enter a subject and describe the issue.'); return; }
     setState(()=>saving=true);
     try {
-      await client.from('support_tickets').insert({'user_id':client.auth.currentUser!.id,'subject':s,'message':m});
+      final created = await client.from('support_tickets')
+          .insert({'user_id':client.auth.currentUser!.id,'subject':s,'message':m})
+          .select('id')
+          .single();
       subject.clear(); message.clear();
-      if(mounted) { setState(()=>notice='Support request submitted.'); await load(); }
+      var messageText = 'Support request submitted. Open the ticket to continue.';
+      try {
+        final response = await client.functions.invoke('ai-support-agent', body: {
+          'ticket_id': created['id'].toString(),
+          'message': m,
+        });
+        final data = response.data;
+        if (data is Map && data['status'] == 'escalated') {
+          messageText = 'Your request has been submitted and escalated to human support.';
+        } else if (data is Map && data['status'] == 'answered') {
+          messageText = 'Your request has been submitted. Go-Ride support has replied.';
+        }
+      } catch (aiError) {
+        debugPrint('AI support invocation failed; ticket remains in the Admin queue: $aiError');
+        messageText = 'Support request submitted. If AI support is unavailable, the Admin team can still review your ticket.';
+      }
+      if(mounted) { setState(()=>notice=messageText); await load(); }
     } catch (_) { if(mounted) setState(()=>error='Support request could not be submitted. Please try again.'); }
     finally { if(mounted) setState(()=>saving=false); }
   }
@@ -1804,14 +1930,200 @@ class _CustomerSectionScreenState extends State<CustomerSectionScreen> {
         trailing:IconButton(tooltip:'Delete saved place',onPressed:()=>deleteSavedPlace(row['id'].toString()),icon:const Icon(Icons.delete_outline)),
       )),
       for(final row in rows) if(widget.section=='support') Card(child:ListTile(
-        leading:const Icon(Icons.support_agent,color:Color(0xFF087E72)),
+        leading:Icon(row['needs_human'] == true ? Icons.support_agent : Icons.chat_bubble_outline,color:row['priority'] == 'urgent' ? Colors.red : const Color(0xFF087E72)),
         title:Text(row['subject']?.toString() ?? 'Support request'),
-        subtitle:Text('${row['message'] ?? ''}\nStatus: ${row['status'] ?? 'open'}',maxLines:4,overflow:TextOverflow.ellipsis),
+        subtitle:Text('${row['message'] ?? ''}\nStatus: ${row['status'] ?? 'open'} · Priority: ${row['priority'] ?? 'normal'}${row['needs_human'] == true ? ' · Human support' : ''}',maxLines:4,overflow:TextOverflow.ellipsis),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push<void>(MaterialPageRoute<void>(
+          builder: (_) => SupportTicketChatScreen(ticketId: row['id'].toString(), subject: row['subject']?.toString() ?? 'Support request'),
+        )),
       )),
     ]))),
   );
 }
 
+
+class SupportTicketChatScreen extends StatefulWidget {
+  const SupportTicketChatScreen({super.key, required this.ticketId, required this.subject});
+  final String ticketId;
+  final String subject;
+
+  @override
+  State<SupportTicketChatScreen> createState() => _SupportTicketChatScreenState();
+}
+
+class _SupportTicketChatScreenState extends State<SupportTicketChatScreen> {
+  final TextEditingController _message = TextEditingController();
+  List<Map<String, dynamic>> _messages = [];
+  bool _loading = true;
+  bool _sending = false;
+  bool _needsHuman = false;
+  String _status = 'open';
+  String? _error;
+  String? _notice;
+
+  SupabaseClient get _client => Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _message.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      final results = await Future.wait([
+        _client.from('support_ticket_messages')
+            .select('id,author_type,content,created_at')
+            .eq('ticket_id', widget.ticketId)
+            .order('created_at'),
+        _client.from('support_tickets')
+            .select('status,needs_human')
+            .eq('id', widget.ticketId)
+            .maybeSingle(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _messages = List<Map<String, dynamic>>.from(results[0] as List);
+        final ticket = results[1] as Map<String, dynamic>?;
+        _status = ticket?['status']?.toString() ?? 'open';
+        _needsHuman = ticket?['needs_human'] == true;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Could not load this conversation. Refresh and try again.');
+      debugPrint('Support conversation load failed: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _send({bool requestHuman = false}) async {
+    final content = requestHuman ? 'Please connect me to a human support agent.' : _message.text.trim();
+    if (content.isEmpty || _sending) return;
+    setState(() { _sending = true; _error = null; _notice = null; });
+    try {
+      final response = await _client.functions.invoke('ai-support-agent', body: {
+        'ticket_id': widget.ticketId,
+        'message': content,
+        'request_human': requestHuman,
+      });
+      if (response.status >= 400) throw Exception('support_function_failed');
+      _message.clear();
+      final data = response.data;
+      if (mounted) {
+        setState(() => _notice = data is Map && data['status'] == 'escalated'
+            ? 'Your conversation has been escalated to human support.'
+            : 'Go-Ride support has replied.');
+      }
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Message could not be sent. Your original ticket is still saved and visible to the Admin team.');
+      debugPrint('Support message send failed: $error');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(widget.subject), actions: [
+          IconButton(onPressed: _loading ? null : _load, tooltip: 'Refresh conversation', icon: const Icon(Icons.refresh)),
+        ]),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                color: _needsHuman ? Theme.of(context).colorScheme.errorContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Text(
+                  'Status: ' + _status + (_needsHuman ? ' · Human support requested' : ''),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Message(text: _error!, isError: true)),
+              if (_notice != null) Padding(padding: const EdgeInsets.all(8), child: Message(text: _notice!)),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          if (_messages.isEmpty) const Text('Send a message to start this support conversation.'),
+                          for (final item in _messages)
+                            Align(
+                              alignment: item['author_type'] == 'customer' ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 560),
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: item['author_type'] == 'customer'
+                                      ? Theme.of(context).colorScheme.primaryContainer
+                                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item['author_type'] == 'customer' ? 'You'
+                                          : item['author_type'] == 'ai_agent' ? 'Go-Ride AI support'
+                                          : item['author_type'] == 'admin' ? 'Go-Ride support team'
+                                          : 'System update',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(item['content']?.toString() ?? ''),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _message,
+                      minLines: 1,
+                      maxLines: 4,
+                      decoration: const InputDecoration(labelText: 'Reply to support', border: OutlineInputBorder()),
+                      enabled: !_sending && _status != 'closed' && _status != 'resolved',
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _sending || _status == 'closed' || _status == 'resolved' ? null : () => _send(requestHuman: true),
+                          icon: const Icon(Icons.support_agent),
+                          label: const Text('Human support'),
+                        ),
+                        const Spacer(),
+                        FilledButton.icon(
+                          onPressed: _sending || _status == 'closed' || _status == 'resolved' ? null : () => _send(),
+                          icon: const Icon(Icons.send),
+                          label: Text(_sending ? 'Sending…' : 'Send'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key, this.backendReady = true});
