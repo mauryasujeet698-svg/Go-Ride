@@ -1042,7 +1042,7 @@ class _PreviewHomeScreenState extends State<PreviewHomeScreen> {
             return;
           }
           if (index == 1) {
-            Navigator.of(context).push<void>(
+            Navigator.of(context, rootNavigator: true).push<void>(
               MaterialPageRoute<void>(builder: (_) => const ServicesScreen()),
             );
             return;
@@ -1530,7 +1530,7 @@ class _RideHomeScreenState extends State<RideHomeScreen> {
       onDestinationSelected: (index) {
         if (index == 0) return;
         if (index == 1) {
-          Navigator.of(context).push<void>(
+          Navigator.of(context, rootNavigator: true).push<void>(
             MaterialPageRoute<void>(builder: (_) => const ServicesScreen()),
           );
           return;
