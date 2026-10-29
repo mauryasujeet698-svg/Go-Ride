@@ -60,8 +60,10 @@ jobs:
         include:
           - app: admin
             path: apps/admin
+            oauth_scheme: io.supabase.gorideadmin
           - app: driver-partner
             path: apps/driver_partner
+            oauth_scheme: io.supabase.goridedriver
     defaults:
       run:
         working-directory: ${{ matrix.path }}
@@ -76,12 +78,38 @@ jobs:
           flutter-version: '3.29.3'
           channel: stable
           cache: true
+      - name: Generate Android platform files
+        run: flutter create --platforms=android --org com.alteo .
+      - name: Configure Google OAuth callback
+        env:
+          OAUTH_REDIRECT_SCHEME: ${{ matrix.oauth_scheme }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          content = manifest.read_text()
+          scheme = os.environ["OAUTH_REDIRECT_SCHEME"]
+          if "login-callback" not in content:
+              callback = f\'''            <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
+                          <data android:scheme="{scheme}" android:host="login-callback" />
+                      </intent-filter>
+          \'''
+              content = content.replace("</activity>", callback + "        </activity>", 1)
+              manifest.write_text(content)
+          PY
       - run: flutter pub get
       - run: dart format lib
       - run: flutter analyze --no-fatal-infos
       - run: flutter test --reporter expanded
       - name: Build ABI-split APKs
-        run: flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
       - name: Enforce APK size limit
         shell: bash
         run: |
