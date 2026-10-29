@@ -106,6 +106,18 @@ jobs:
           scheme = os.environ["OAUTH_REDIRECT_SCHEME"]
           label = os.environ["APP_LABEL"]
           content = re.sub(r'android:label="[^"]*"', 'android:label="' + label + '"', content, count=1)
+          if scheme == "io.supabase.goridedriver":
+              permissions = [
+                  "android.permission.ACCESS_COARSE_LOCATION",
+                  "android.permission.ACCESS_FINE_LOCATION",
+                  "android.permission.FOREGROUND_SERVICE",
+                  "android.permission.FOREGROUND_SERVICE_LOCATION",
+                  "android.permission.POST_NOTIFICATIONS",
+              ]
+              for permission in permissions:
+                  tag = '<uses-permission android:name="' + permission + '" />'
+                  if tag not in content:
+                      content = content.replace("<application", "    " + tag + "\\n    <application", 1)
           if "login-callback" not in content:
               callback = """            <intent-filter>
                           <action android:name="android.intent.action.VIEW" />
