@@ -866,7 +866,7 @@ class _AiReportsTabState extends State<_AiReportsTab> {
     setState(() => _loading = true);
     try {
       final settings = await _db.from('ai_runtime_settings').select().eq('singleton', true).maybeSingle();
-      final reports = await _db.from('daily_ai_reports').select('id,period_start,period_end,status,summary,provider,model,findings,recommendations,created_at,error_code').order('created_at', ascending: false).limit(20);
+      final reports = await _db.from('daily_ai_reports').select('id,period_start,period_end,status,summary,provider,model,metrics,findings,recommendations,created_at,error_code').order('created_at', ascending: false).limit(20);
       final usage = await _db.from('ai_usage_events').select('id,job_type,provider,model,status,estimated_cost_minor,created_at,error_code').order('created_at', ascending: false).limit(20);
       final securityRuns = await _db.from('ai_job_runs').select('id,status,output_summary,created_at,error_code,provider,model').eq('job_type', 'security_audit').order('created_at', ascending: false).limit(10);
       if (!mounted) return;
@@ -972,6 +972,37 @@ class _AiReportsTabState extends State<_AiReportsTab> {
                   subtitle: Text(_value(report, 'period_start') + ' → ' + _value(report, 'period_end')),
                   children: [
                     Padding(padding: const EdgeInsets.all(16), child: Align(alignment: Alignment.centerLeft, child: Text(_value(report, 'summary', 'No summary available.')))),
+                    if (report['findings'] is List && (report['findings'] as List).isNotEmpty) ...[
+                      const Padding(padding: EdgeInsets.fromLTRB(16, 8, 16, 4), child: Align(alignment: Alignment.centerLeft, child: Text('Findings', style: TextStyle(fontWeight: FontWeight.bold)))),
+                      for (final finding in (report['findings'] as List))
+                        ListTile(
+                          leading: const Icon(Icons.flag_outlined),
+                          title: Text(finding is Map ? (finding['title']?.toString() ?? 'Finding') : finding.toString()),
+                          subtitle: Text(finding is Map ? (finding['detail']?.toString() ?? finding['severity']?.toString() ?? '') : ''),
+                        ),
+                    ],
+                    if (report['recommendations'] is List && (report['recommendations'] as List).isNotEmpty) ...[
+                      const Padding(padding: EdgeInsets.fromLTRB(16, 8, 16, 4), child: Align(alignment: Alignment.centerLeft, child: Text('Recommendations', style: TextStyle(fontWeight: FontWeight.bold)))),
+                      for (final recommendation in (report['recommendations'] as List))
+                        ListTile(
+                          leading: const Icon(Icons.lightbulb_outline),
+                          title: Text(recommendation is Map ? (recommendation['action']?.toString() ?? recommendation['title']?.toString() ?? 'Recommendation') : recommendation.toString()),
+                          subtitle: Text(recommendation is Map ? (recommendation['reason']?.toString() ?? recommendation['priority']?.toString() ?? '') : ''),
+                        ),
+                    ],
+                    if (report['metrics'] is Map)
+                      ExpansionTile(
+                        title: const Text('Raw metrics'),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: SelectableText((report['metrics'] as Map).entries.map((e) => e.key.toString() + ': ' + e.value.toString()).join('\\n')),
+                            ),
+                          ),
+                        ],
+                      ),
                     if (report['error_code'] != null) ListTile(title: const Text('Error code'), subtitle: Text(report['error_code'].toString())),
                   ],
                 ),
