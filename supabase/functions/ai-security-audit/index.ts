@@ -61,7 +61,7 @@ async function aiNarrative(provider: string, model: string, key: string, metrics
     });
     extract = p => p?.choices?.[0]?.message?.content ?? "";
   } else if (provider === "gemini") {
-    response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent, {
+    response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
       method: "POST",
       headers: {"Content-Type": "application/json", "x-goog-api-key": key},
       body: JSON.stringify({contents: [{role: "user", parts: [{text: prompt}]}], generationConfig: {responseMimeType: "application/json", temperature: 0.1}}),
