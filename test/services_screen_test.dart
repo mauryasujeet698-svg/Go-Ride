@@ -19,7 +19,7 @@ void main() {
       home: PreviewHomeScreen(backendReady: false),
     ));
     await tester.pump();
-    await tester.tap(find.text('Services').last);
+    await tester.tap(find.byIcon(Icons.grid_view_outlined));
     await tester.pump();
 
     expect(find.byType(ServicesScreen), findsOneWidget);
