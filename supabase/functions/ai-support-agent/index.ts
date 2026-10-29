@@ -176,15 +176,45 @@ Deno.serve(async (req: Request) => {
 
   let reply: { reply: string; resolved: boolean; needsHuman: boolean; priority: string };
   let fallbackReason = "";
+  let usageId: string | null = null;
   try {
     if (!provider || provider === "none" || !model || !key) throw new Error("ai_provider_unavailable");
     const { data: history, error: historyError } = await admin.from("support_ticket_messages")
       .select("author_type,content").eq("ticket_id", ticketId)
       .order("created_at", { ascending: true }).limit(20);
     if (historyError) throw new Error("conversation_unavailable");
+    const reservation = await admin.rpc("reserve_ai_usage_budget", {
+      p_job_type: "support_triage",
+      p_provider: provider,
+      p_model: model,
+    });
+    if (reservation.error || !reservation.data) {
+      const message = reservation.error?.message ?? "";
+      if (message.includes("ai_request_budget_exceeded")) throw new Error("ai_request_budget_exceeded");
+      if (message.includes("ai_cost_budget_exceeded")) throw new Error("ai_cost_budget_exceeded");
+      throw new Error("ai_budget_reservation_failed");
+    }
+    usageId = String(reservation.data);
     reply = await generateReply(provider, model, key, ticket.subject, history ?? []);
+    await admin.from("ai_usage_events").update({
+      status: "succeeded",
+      completed_at: new Date().toISOString(),
+    }).eq("id", usageId);
   } catch (error) {
-    fallbackReason = error instanceof Error ? error.message : "ai_provider_unavailable";
+    const rawCode = error instanceof Error ? error.message : "";
+    const allowedCodes = [
+      "ai_provider_unavailable", "conversation_unavailable", "provider_not_configured",
+      "provider_request_failed", "provider_empty_response", "ai_request_budget_exceeded",
+      "ai_cost_budget_exceeded", "ai_budget_reservation_failed",
+    ];
+    fallbackReason = allowedCodes.includes(rawCode) ? rawCode : "ai_provider_unavailable";
+    if (usageId) {
+      await admin.from("ai_usage_events").update({
+        status: "failed",
+        error_code: fallbackReason,
+        completed_at: new Date().toISOString(),
+      }).eq("id", usageId);
+    }
     reply = {
       reply: "I can't safely resolve this automatically right now, so I've sent your request to the Go-Ride support team.",
       resolved: false,
