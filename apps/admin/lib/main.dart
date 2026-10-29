@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -5,11 +7,16 @@ import 'admin_dashboard.dart';
 
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const supabasePublishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+const adminRedirectUri = 'io.supabase.gorideadmin://login-callback/';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty) {
-    await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
+    await Supabase.initialize(
+      url: supabaseUrl,
+      publishableKey: supabasePublishableKey,
+      authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
+    );
   }
   runApp(const GoRideAdminApp());
 }
@@ -24,9 +31,7 @@ class GoRideAdminApp extends StatelessWidget {
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF163A5F)),
-          inputDecorationTheme: const InputDecorationTheme(
-            border: OutlineInputBorder(),
-          ),
+          inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
         ),
         home: supabaseUrl.isEmpty || supabasePublishableKey.isEmpty
             ? const _ConfigurationPage()
@@ -59,17 +64,26 @@ class _AdminGate extends StatefulWidget {
 }
 
 class _AdminGateState extends State<_AdminGate> {
-  final _phone = TextEditingController();
-  final _otp = TextEditingController();
   bool _busy = false;
   bool _isAdmin = false;
-  String _message = 'Sign in with an authorized admin account.';
+  String _message = 'Sign in with the authorized Google account for Go-Ride Admin.';
+  StreamSubscription<AuthState>? _authSubscription;
 
   SupabaseClient get _db => Supabase.instance.client;
 
   @override
   void initState() {
     super.initState();
+    _authSubscription = _db.auth.onAuthStateChange.listen((state) {
+      if (state.session != null) {
+        _run(_checkRole);
+      } else if (mounted) {
+        setState(() {
+          _isAdmin = false;
+          _message = 'Sign in with the authorized Google account for Go-Ride Admin.';
+        });
+      }
+    });
     if (_db.auth.currentUser != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _run(_checkRole));
     }
@@ -80,25 +94,19 @@ class _AdminGateState extends State<_AdminGate> {
     try {
       await action();
     } catch (error) {
-      _message = 'Action failed. Verify authentication settings and the Supabase role policy.';
+      _message = 'Action failed. Verify Google OAuth settings and the Supabase role policy.';
       debugPrint('Admin app action failed: $error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _sendOtp() => _run(() async {
-        await _db.auth.signInWithOtp(phone: _phone.text.trim());
-        _message = 'OTP requested. Enter the code sent to your phone.';
-      });
-
-  Future<void> _verifyOtp() => _run(() async {
-        await _db.auth.verifyOTP(
-          phone: _phone.text.trim(),
-          token: _otp.text.trim(),
-          type: OtpType.sms,
+  Future<void> _signInWithGoogle() => _run(() async {
+        await _db.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: adminRedirectUri,
         );
-        await _checkRole();
+        _message = 'Continue in the browser to sign in with Google. You will return to Go-Ride Admin.';
       });
 
   Future<void> _checkRole() async {
@@ -118,7 +126,7 @@ class _AdminGateState extends State<_AdminGate> {
     _isAdmin = (roles as List).isNotEmpty;
     _message = _isAdmin
         ? 'Admin role verified.'
-        : 'Access denied. This account has no active admin role; no admin privileges were granted.';
+        : 'Access denied. This Google account has no active admin role; no admin privileges were granted.';
   }
 
   Future<void> _signOut() async {
@@ -127,14 +135,12 @@ class _AdminGateState extends State<_AdminGate> {
     setState(() {
       _isAdmin = false;
       _message = 'Signed out.';
-      _otp.clear();
     });
   }
 
   @override
   void dispose() {
-    _phone.dispose();
-    _otp.dispose();
+    _authSubscription?.cancel();
     super.dispose();
   }
 
@@ -147,36 +153,16 @@ class _AdminGateState extends State<_AdminGate> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const Text(
-            'Operations console',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-          ),
+          const Text('Operations console', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           const Text(
-            'Admin access is deny-by-default. The app checks an explicit server-managed role; a normal account cannot promote itself.',
+            'Sign in with Google. Admin access is deny-by-default and requires an explicit server-managed role; signing in alone never grants administrative privileges.',
           ),
           const SizedBox(height: 20),
-          TextField(
-            controller: _phone,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Admin phone number with country code',
-            ),
-          ),
-          const SizedBox(height: 10),
-          FilledButton(
-            onPressed: _busy ? null : _sendOtp,
-            child: const Text('Send SMS OTP'),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _otp,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'SMS verification code'),
-          ),
-          OutlinedButton(
-            onPressed: _busy ? null : _verifyOtp,
-            child: const Text('Verify and check admin role'),
+          FilledButton.icon(
+            onPressed: _busy ? null : _signInWithGoogle,
+            icon: const Icon(Icons.login),
+            label: const Text('Continue with Google'),
           ),
           const SizedBox(height: 16),
           Card(
@@ -190,6 +176,12 @@ class _AdminGateState extends State<_AdminGate> {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Center(child: CircularProgressIndicator()),
+            ),
+          if (_db.auth.currentUser != null)
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _signOut,
+              icon: const Icon(Icons.logout),
+              label: const Text('Sign out'),
             ),
           const SizedBox(height: 12),
           const Text(
